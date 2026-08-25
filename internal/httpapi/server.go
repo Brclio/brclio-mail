@@ -249,7 +249,7 @@ func buildVersion() string {
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
 		return info.Main.Version
 	}
-	return "0.1.0-dev"
+	return "0.2.0-dev"
 }
 
 type loginLimiter struct {

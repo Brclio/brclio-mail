@@ -667,6 +667,24 @@ func TestBackupIsValidatedAndNeverOverwrites(t *testing.T) {
 	}
 }
 
+func TestCancelledBackupLeavesNoPublishedOrTemporaryFiles(t *testing.T) {
+	db := testStore(t)
+	directory := filepath.Join(t.TempDir(), "cancelled-backup")
+	destination := filepath.Join(directory, "mail.sqlite")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := db.Backup(ctx, destination); err == nil {
+		t.Fatal("cancelled backup unexpectedly succeeded")
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("cancelled backup left artifacts: %#v", entries)
+	}
+}
+
 func TestAbandonedQueueClaimIsRecovered(t *testing.T) {
 	db := testStore(t)
 	ctx := context.Background()

@@ -41,7 +41,7 @@ func newAPIFixture(t *testing.T) apiFixture {
 
 func TestHTTPStatusUsesInjectedReleaseVersion(t *testing.T) {
 	fixture := newAPIFixture(t)
-	fixture.server.Version = "0.1.0-preview+test"
+	fixture.server.Version = "0.2.0-preview+test"
 	for _, path := range []string{"/healthz", "/api/status"} {
 		response := performJSON(t, fixture.handler, http.MethodGet, path, nil, nil, "")
 		if response.Code != http.StatusOK {

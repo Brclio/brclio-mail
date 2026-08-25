@@ -6,7 +6,7 @@ services:
     build:
       context: .
       args:
-        VERSION: ${BRCLIO_VERSION:-0.1.0-preview}
+        VERSION: ${BRCLIO_VERSION:-0.2.0-preview}
         COMMIT: ${BRCLIO_COMMIT:-local}
         BUILD_DATE: ${BRCLIO_BUILD_DATE:-1970-01-01T00:00:00Z}
     restart: unless-stopped
@@ -60,6 +60,7 @@ services:
       BRCLIO_SESSION_TTL: ${BRCLIO_SESSION_TTL:-168h}
       BRCLIO_QUEUE_POLL_INTERVAL: ${BRCLIO_QUEUE_POLL_INTERVAL:-30s}
       BRCLIO_QUEUE_MAX_ATTEMPTS: ${BRCLIO_QUEUE_MAX_ATTEMPTS:-12}
+      BRCLIO_BACKUP_TIMEOUT: ${BRCLIO_BACKUP_TIMEOUT:-2h}
     volumes:
       - brclio-mail-data:/data
       - ./secrets/tls:/run/tls:ro

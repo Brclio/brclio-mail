@@ -1,11 +1,11 @@
 GO ?= go
 BINARY ?= bin/brclio-mail
-VERSION ?= 0.1.0-preview
+VERSION ?= 0.2.0-preview
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(BUILD_DATE)
 
-.PHONY: help fmt fmt-check third-party-notices third-party-notices-check test test-race vet vuln build ci docker-build compose-config run-dev doctor backup clean
+.PHONY: help fmt fmt-check third-party-notices third-party-notices-check systemd-package-check test test-race vet vuln build ci docker-build compose-config run-dev doctor backup clean
 
 help:
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -23,6 +23,9 @@ third-party-notices: ## Regenerate production-binary dependency notices.
 third-party-notices-check: ## Verify committed dependency notices are current.
 	$(GO) run ./scripts/third-party-notices -output THIRD_PARTY_NOTICES -check
 
+systemd-package-check: ## Stage and verify the bare-metal systemd package.
+	./scripts/check-systemd-package.sh
+
 test: ## Run unit and integration tests.
 	$(GO) test ./...
 
@@ -39,7 +42,7 @@ build: ## Build the server binary.
 	mkdir -p $(dir $(BINARY))
 	CGO_ENABLED=0 $(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/brclio-mail
 
-ci: fmt-check third-party-notices-check test test-race vet vuln build ## Run the local equivalent of CI.
+ci: fmt-check third-party-notices-check systemd-package-check test test-race vet vuln build ## Run the local equivalent of CI.
 
 docker-build: ## Build the Preview container image.
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg BUILD_DATE=$(BUILD_DATE) -t brclio-mail:preview .

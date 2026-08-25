@@ -28,7 +28,7 @@ import (
 )
 
 var (
-	version   = "0.1.0-dev"
+	version   = "0.2.0-dev"
 	commit    = "unknown"
 	buildDate = "unknown"
 )
@@ -86,7 +86,7 @@ func run(args []string, logger *slog.Logger) error {
 		if len(args) != 1 {
 			return errors.New("usage: brclio-mail backup /path/to/new-backup.sqlite")
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.BackupTimeout)
 		defer cancel()
 		if err := db.Backup(ctx, args[0]); err != nil {
 			return err

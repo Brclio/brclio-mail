@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+fail() {
+  printf 'backup helper: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ "$(id -u)" -eq 0 ]] || fail "must run as root through the systemd backup unit"
+[[ "$#" -eq 2 ]] || fail "usage: brclio-mail-backup-helper prepare|publish NAME"
+action="$1"
+backup_name="$2"
+[[ "${backup_name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || fail "invalid backup name"
+[[ "${backup_name}" != *..* ]] || fail "backup name cannot contain consecutive dots"
+
+database_path=/var/lib/brclio-mail/brclio-mail.db
+backup_directory=/var/backups/brclio-mail
+staging_directory="${backup_directory}/.staging"
+staging_path="${staging_directory}/${backup_name}.sqlite"
+incoming_directory="${backup_directory}/.incoming"
+incoming_path="${incoming_directory}/${backup_name}.sqlite"
+backup_path="${backup_directory}/${backup_name}.sqlite"
+reserve_bytes=1073741824
+
+available_bytes() {
+  df --block-size=1 --output=avail "$1" | awk 'NR == 2 { print $1 }'
+}
+
+case "${action}" in
+  prepare)
+    [[ -f "${database_path}" && ! -L "${database_path}" ]] || fail "database is missing or is a symbolic link"
+    [[ -d "${backup_directory}" && ! -L "${backup_directory}" ]] || fail "backup vault is missing or unsafe"
+    [[ "$(stat --format=%u "${backup_directory}")" == "0" ]] || fail "backup vault must be owned by root"
+    [[ -d "${staging_directory}" && ! -L "${staging_directory}" ]] || fail "backup staging directory is missing or unsafe"
+    [[ "$(stat --format=%u "${staging_directory}")" == "0" ]] || fail "backup staging directory must be owned by root"
+    [[ -d "${incoming_directory}" && ! -L "${incoming_directory}" ]] || fail "backup incoming directory is missing or unsafe"
+    [[ "$(stat --format=%u "${incoming_directory}")" == "0" ]] || fail "backup incoming directory must be owned by root"
+    [[ ! -e "${staging_path}" ]] || fail "staging backup already exists: ${staging_path}"
+    [[ ! -L "${staging_path}" ]] || fail "staging backup path is a symbolic link"
+    [[ ! -e "${incoming_path}" && ! -L "${incoming_path}" ]] || fail "incoming backup already exists: ${incoming_path}"
+    [[ ! -e "${backup_path}" ]] || fail "published backup already exists: ${backup_path}"
+    [[ ! -L "${backup_path}" ]] || fail "published backup path is a symbolic link"
+
+    database_bytes="$(stat --format=%s "${database_path}")"
+    wal_bytes=0
+    if [[ -f "${database_path}-wal" ]]; then
+      wal_bytes="$(stat --format=%s "${database_path}-wal")"
+    fi
+    required_bytes=$((database_bytes + wal_bytes + reserve_bytes))
+    backup_available="$(available_bytes "${backup_directory}")"
+    [[ "${backup_available}" =~ ^[0-9]+$ && "${backup_available}" -ge "${required_bytes}" ]] || \
+      fail "insufficient free space for snapshot and 1 GiB safety reserve"
+    ;;
+  publish)
+    [[ -d "${staging_directory}" && ! -L "${staging_directory}" ]] || fail "backup staging directory is unsafe"
+    [[ -d "${incoming_directory}" && ! -L "${incoming_directory}" ]] || fail "backup incoming directory is unsafe"
+    [[ ! -e "${incoming_path}" && ! -L "${incoming_path}" ]] || fail "incoming backup already exists"
+    [[ ! -e "${backup_path}" && ! -L "${backup_path}" ]] || fail "published backup already exists"
+
+    # The rename is atomic inside one root-owned vault. The service account can
+    # no longer replace the entry after it lands in .incoming.
+    mv -- "${staging_path}" "${incoming_path}"
+    [[ -f "${incoming_path}" && ! -L "${incoming_path}" ]] || fail "staging entry was not a regular file; quarantined at ${incoming_path}"
+    [[ "$(stat --format=%u "${incoming_path}")" == "$(id -u brclio-mail)" ]] || fail "staging backup has an unexpected owner"
+    [[ "$(stat --format=%h "${incoming_path}")" == "1" ]] || fail "staging backup has multiple hard links"
+    [[ "$(stat --format=%s "${incoming_path}")" -gt 0 ]] || fail "staging backup is empty"
+    chown root:root "${incoming_path}"
+    chmod 0600 "${incoming_path}"
+    mv -- "${incoming_path}" "${backup_path}"
+    [[ "$(stat --format=%u "${backup_path}")" == "0" ]] || fail "published backup is not owned by root"
+    [[ "$(stat --format=%a "${backup_path}")" == "600" ]] || fail "published backup mode is not 0600"
+    printf 'Published verified backup: %s\n' "${backup_path}"
+    ;;
+  *)
+    fail "unknown action: ${action}"
+    ;;
+esac

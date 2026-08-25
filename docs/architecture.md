@@ -2,7 +2,7 @@
 
 ## 定位与部署单元
 
-Brclio Mail Preview 是一个模块化单体：一个 Go 二进制同时提供 Web/API、SMTP、Submission、IMAP 和队列 worker；所有持久状态进入同一台主机的 SQLite 数据库。Docker Compose 启动一个应用副本。
+Brclio Mail Preview 是一个模块化单体：一个 Go 二进制同时提供 Web/API、SMTP、Submission、IMAP 和队列 worker；所有持久状态进入同一台主机的 SQLite 数据库。首选部署由 systemd 以受限服务账号启动一个应用副本，Docker Compose 是可选封装。
 
 ```text
 Internet MTA -- TCP 25 --------> SMTP inbound ----+
@@ -14,7 +14,7 @@ Browser ------ TCP 443 --------> Web/API ---------+       +--> queue--+
                                                          +--> remote MX (experimental)
 ```
 
-Compose 把公网 `80/443/25/465/587/993` 分别映射到容器 `8080/8443/2525/2465/2587/2993`。明文 IMAP listener 默认禁用，`BRCLIO_IMAP_ADDR` 只允许在开发模式绑定回环地址且不得启用 STARTTLS；生产客户端必须使用 993 隐式 TLS。生产 Submission 认证必须在 TLS 内进行。
+systemd 模板直接绑定公网 `80/443/25/465/587/993`，unit 只授予低端口绑定能力；可选 Compose 则把这些主机端口映射到容器 `8080/8443/2525/2465/2587/2993`。明文 IMAP listener 默认禁用，`BRCLIO_IMAP_ADDR` 只允许在开发模式绑定回环地址且不得启用 STARTTLS；生产客户端必须使用 993 隐式 TLS。生产 Submission 认证必须在 TLS 内进行。
 
 ## 组件
 
@@ -90,7 +90,7 @@ WAL 依赖同一主机上的共享内存协调，因此不支持网络文件系�
 
 ## TLS 与证书
 
-自动模式由内置 ACME HTTP-01 获取证书并缓存到 `/data/acme`；静态模式从只读挂载读取证书和私钥。Web HTTPS、Submission、SMTPS 和 IMAPS 共用 TLS 配置，最低 TLS 1.2。生产模式要求 HTTPS `BRCLIO_BASE_URL` 和可用证书。
+自动模式由内置 ACME HTTP-01 获取证书；systemd 默认缓存到 `/var/lib/brclio-mail/acme`，Docker 缓存到 `/data/acme`。静态模式从 `/etc/brclio-mail/tls` 或容器只读挂载读取证书和私钥。Web HTTPS、Submission、SMTPS 和 IMAPS 共用 TLS 配置，最低 TLS 1.2。生产模式要求 HTTPS `BRCLIO_BASE_URL` 和可用证书。
 
 邮件服务器之间的 SMTP 通常仍是逐跳安全，不是端到端加密。当前直接投递的 STARTTLS 不执行 MTA-STS/DANE 强制；敏感内容需要由发件人与收件人的更高层加密方案保护，而当前产品未内置这些方案。
 

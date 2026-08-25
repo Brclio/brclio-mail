@@ -1,0 +1,33 @@
+[Unit]
+Description=Create verified Brclio Mail backup %i
+Documentation=https://github.com/Brclio/brclio-mail
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=brclio-mail
+Group=brclio-mail
+WorkingDirectory=/var/lib/brclio-mail
+Environment=BRCLIO_DEV_MODE=true
+Environment=BRCLIO_DATA_DIR=/var/lib/brclio-mail
+Environment=BRCLIO_DATABASE_PATH=/var/lib/brclio-mail/brclio-mail.db
+ExecStartPre=+/usr/local/libexec/brclio-mail-backup-helper prepare %i
+ExecStart=/usr/local/bin/brclio-mail backup /var/backups/brclio-mail/.staging/%i.sqlite
+ExecStartPost=+/usr/local/libexec/brclio-mail-backup-helper publish %i
+TimeoutStartSec=2h15min
+UMask=0077
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/brclio-mail /var/backups/brclio-mail/.staging /var/backups/brclio-mail/.incoming
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=brclio-mail-backup

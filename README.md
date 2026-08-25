@@ -1,8 +1,8 @@
 # Brclio Mail
 
-> **Preview / 预览版。** Brclio Mail 是面向个人与小团队的单节点私有邮件系统实验实现，尚未经过生产规模、长期兼容性或独立安全审计验证。请先阅读[已知限制与路线图](docs/limitations-roadmap.md)，不要把当前版本用于唯一副本、关键业务或合规归档。
+> **Preview / 预览版。** Brclio Mail 是面向个人、家庭与完全受信任的小公司/小团队的单节点私有邮件系统实验实现，尚未经过生产规模、长期兼容性或独立安全审计验证。请先阅读[已知限制与路线图](docs/limitations-roadmap.md)，不要把当前版本用于唯一副本、关键业务或合规归档。
 
-Brclio Mail 把网页邮箱、管理员控制台、SMTP、Submission、IMAP、投递队列、不可由普通用户删除的管理员归档和审计日志放进一个 Go 服务，并使用本机 SQLite 持久化。它适合在一台有固定公网 IP、可配置 PTR 且开放 25 端口的 Linux 主机上试用。
+Brclio Mail 把网页邮箱、管理员控制台、SMTP、Submission、IMAP、投递队列、不可由普通用户删除的管理员归档和审计日志放进一个 Go 服务，并使用本机 SQLite 持久化。它适合在一台有固定公网 IP、可配置 PTR 且开放 25 端口的 Linux 主机上，由个人或小公司管理员进行低风险试用。
 
 ## 当前能力
 
@@ -25,40 +25,39 @@ Brclio Mail 把网页邮箱、管理员控制台、SMTP、Submission、IMAP、�
 
 ## 快速部署
 
-前置条件：Docker Engine、Docker Compose v2、一个域名、一台具有固定公网 IP 的主机，以及能够设置反向 DNS 的云服务商。先确认主机和上游网络允许 TCP 25；很多云平台默认封禁出站 25。
+首选方式是直接安装为 Linux systemd 服务；示例适用于 systemd `247` 或更新版本的 Ubuntu/Debian 与 RHEL/Rocky/AlmaLinux。前置条件包括常用系统工具、一个域名、一台具有固定公网 IP 的主机，以及能够设置反向 DNS 的云服务商。先确认上游网络允许入站 TCP 25；很多云平台还会封禁出站 25。安装程序默认下载指定 GitHub Release 并核对 SHA-256；只有选择本地源码构建时才需要 Go `1.26.6`。
 
 ```bash
-cp .env.example .env
-mkdir -p secrets/tls
-openssl rand -base64 36 > secrets/setup_token
-: > secrets/relay_password
-chmod 700 secrets secrets/tls
-chmod 600 secrets/setup_token secrets/relay_password
+target_version="v0.2.0-preview"
+git clone --branch "$target_version" --depth 1 https://github.com/Brclio/brclio-mail.git
+cd brclio-mail
+sudo ./scripts/install-systemd.sh \
+  --version "$target_version" \
+  --hostname mail.example.com \
+  --acme-email postmaster@example.com \
+  --no-start
+sudoedit /etc/brclio-mail/brclio-mail.env
+sudo systemctl enable --now brclio-mail
+sudo systemctl status brclio-mail --no-pager
+/usr/local/bin/brclio-mail version
 ```
 
-编辑 `.env`，至少填写 `BRCLIO_HOSTNAME`、`BRCLIO_BASE_URL` 和 `BRCLIO_ACME_EMAIL`。推荐配置 smarthost，并保持 `BRCLIO_DIRECT_DELIVERY=false`。容器以 UID/GID `10001` 运行；在 Linux 主机上让它可以读取 secret：
+安装程序创建受限的 `brclio-mail` 服务账号，配置位于 `/etc/brclio-mail`，SQLite 与 ACME cache 位于 `/var/lib/brclio-mail`，并在缺失时生成 `/etc/brclio-mail/secrets/setup_token`。首次安装不会覆盖预先准备的配置或 secret；检测到现有安装时会拒绝直接重装，必须走受备份保护的 `upgrade-systemd.sh`。推荐配置 smarthost 并保持 `BRCLIO_DIRECT_DELIVERY=false`；完整的系统包、防火墙、TLS、secret 权限及 SELinux 提示见[部署指南](docs/deployment.md)。
 
-```bash
-sudo chown -R 10001:10001 secrets
-docker compose config
-docker compose up -d --build
-docker compose logs -f brclio-mail
-```
+浏览 `https://mail.example.com`，使用 setup token 完成首次管理员初始化。初始化后轮换 token 并重启服务。新域名保持 `pending`：先发布管理台给出的 `_brclio-mail.<domain>` TXT，再在后台点击检查，只有状态变为 `verified` 才允许该域通过公网 SMTP 收发或外发。完整记录见 [DNS 配置](docs/dns.md)。
 
-浏览 `https://mail.example.com`，使用 `secrets/setup_token` 完成首次管理员初始化。初始化后应轮换该文件中的令牌，再重建容器。域名创建后会保持 `pending`：先发布管理台给出的 `_brclio-mail.<domain>` TXT，再在后台点击检查，只有状态变为 `verified` 才允许该域通过公网 SMTP 收发或外发。完整记录见 [DNS 配置](docs/dns.md)。
+systemd 服务直接监听标准端口：
 
-Compose 的公网端口映射固定为：
+| 端口 | 用途 |
+| ---: | --- |
+| 80 | ACME HTTP-01 与 HTTPS 跳转 |
+| 443 | Web/API HTTPS |
+| 25 | SMTP 服务器间入站 |
+| 465 | 隐式 TLS Submission |
+| 587 | STARTTLS Submission |
+| 993 | 隐式 TLS IMAP |
 
-| 公网 | 容器 | 用途 |
-| ---: | ---: | --- |
-| 80 | 8080 | ACME HTTP-01 与 HTTPS 跳转 |
-| 443 | 8443 | Web/API HTTPS |
-| 25 | 2525 | SMTP 服务器间入站 |
-| 465 | 2465 | 隐式 TLS Submission |
-| 587 | 2587 | STARTTLS Submission |
-| 993 | 2993 | 隐式 TLS IMAP |
-
-`docker compose` 使用本地 named volume 保存 `/data`。**不要**把数据库目录放到 NFS、SMB、对象存储 FUSE 或多台主机共享卷，也不要同时启动多个服务副本。SQLite WAL 只支持同一主机上的协作进程。
+Docker Compose 仍是[可选部署方式](docs/deployment.md#8-可选docker-compose)，不再是首选。无论采用 systemd 还是 Docker，数据库必须位于同一主机的本地块存储；**不要**使用 NFS、SMB、对象存储 FUSE、多主机共享卷或多个服务副本。
 
 ## TLS
 
@@ -67,20 +66,16 @@ Compose 的公网端口映射固定为：
 ```dotenv
 BRCLIO_AUTO_TLS=true
 BRCLIO_ACME_EMAIL=postmaster@example.com
-BRCLIO_TLS_CERT=
-BRCLIO_TLS_KEY=
 ```
 
-若使用已有证书，将证书和私钥放进 `secrets/tls/`，使 UID `10001` 可读，然后改为：
+若使用已有证书，将证书和私钥以 `root:root`、`0600` 放进 `/etc/brclio-mail/tls/`，把安装好的静态 TLS credential drop-in 同时启用到主服务和 doctor unit，然后改为：
 
 ```dotenv
 BRCLIO_AUTO_TLS=false
 BRCLIO_ACME_EMAIL=
-BRCLIO_TLS_CERT=/run/tls/fullchain.pem
-BRCLIO_TLS_KEY=/run/tls/privkey.pem
 ```
 
-两种模式不能同时启用。完整步骤、续期要求与防火墙提示见[部署指南](docs/deployment.md)。
+不要在环境文件中直接设置证书、私钥或 secret 的 `_FILE` 路径；systemd unit 通过 `LoadCredential` 提供隔离副本。两种 TLS 模式不能同时启用。完整 drop-in 命令、续期要求与防火墙提示见[部署指南](docs/deployment.md)。
 
 ## 关键运行配置
 
@@ -89,6 +84,7 @@ BRCLIO_TLS_KEY=/run/tls/privkey.pem
 | `BRCLIO_MAX_MESSAGE_BYTES` | `26214400`（25 MiB） | 单封原始 MIME 上限 |
 | `BRCLIO_MAX_ARCHIVE_BYTES` | `107374182400`（100 GiB） | 管理员归档的保守物理占用估算上限 |
 | `BRCLIO_MIN_FREE_DISK_BYTES` | `1073741824`（1 GiB） | 数据库所在卷低于该可用空间时拒绝新邮件 |
+| `BRCLIO_BACKUP_TIMEOUT` | `2h` | 单次 SQLite backup CLI 的最长执行时间 |
 | `BRCLIO_DIRECT_DELIVERY` | `false` | 实验性直接 MX 投递开关；保持关闭并使用 smarthost |
 
 用户邮箱 quota 是该用户当前可见副本的**逻辑 MIME 大小**，不是磁盘配额。归档 cap 会对 raw MIME、解码附件 BLOB、正文/全文索引等采用保守物理估算，也不等同于 `du` 显示的精确 SQLite 文件大小。1 GiB 低水位用于避免吃尽数据卷，但 WAL、备份、ACME 缓存及文件系统开销仍可能增长，必须独立监控容量并保留恢复空间。
@@ -96,17 +92,12 @@ BRCLIO_TLS_KEY=/run/tls/privkey.pem
 ## 运维入口
 
 ```bash
-# 运行数据库、外键、配置和版本自检
-docker compose exec -T brclio-mail brclio-mail doctor
-
-# 创建经过完整性校验的 SQLite 在线备份
-stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-docker compose exec -T brclio-mail brclio-mail backup "/data/backups/${stamp}.sqlite"
-mkdir -p backups
-docker compose cp "brclio-mail:/data/backups/${stamp}.sqlite" "backups/${stamp}.sqlite"
+sudo systemctl is-active brclio-mail
+sudo journalctl -u brclio-mail --since "30 minutes ago"
+curl -fsS https://mail.example.com/healthz
 ```
 
-备份仍包含所有邮件正文、附件、密码哈希、DKIM 私钥和管理员归档，必须加密并移出主机。恢复演练与校验命令见[运维、备份与恢复](docs/operations.md)。
+`doctor`、一致性在线备份、恢复、升级/回滚和 Docker 对照命令见[运维、备份与恢复](docs/operations.md)。备份仍包含所有邮件正文、附件、密码哈希、DKIM 私钥和管理员归档，必须加密并移出主机。
 
 ## 文档
 

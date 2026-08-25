@@ -1,0 +1,34 @@
+[Unit]
+Description=Verify Brclio Mail configuration and SQLite integrity
+Documentation=https://github.com/Brclio/brclio-mail
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=brclio-mail
+Group=brclio-mail
+WorkingDirectory=/var/lib/brclio-mail
+EnvironmentFile=/etc/brclio-mail/brclio-mail.env
+LoadCredential=setup_token:/etc/brclio-mail/secrets/setup_token
+LoadCredential=relay_password:/etc/brclio-mail/secrets/relay_password
+Environment=BRCLIO_SETUP_TOKEN_FILE=%d/setup_token
+Environment=BRCLIO_RELAY_PASSWORD_FILE=%d/relay_password
+ExecStart=/usr/local/bin/brclio-mail doctor
+TimeoutStartSec=2h
+UMask=0077
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/brclio-mail
+ReadOnlyPaths=/etc/brclio-mail
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=brclio-mail-doctor

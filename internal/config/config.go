@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Config struct {
@@ -42,6 +43,7 @@ type Config struct {
 	MinFreeDiskBytes   int64
 	SessionTTL         time.Duration
 	QueuePollInterval  time.Duration
+	BackupTimeout      time.Duration
 	QueueMaxAttempts   int
 }
 
@@ -60,39 +62,69 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
-		DataDir:            dataDir,
-		DatabasePath:       env("BRCLIO_DATABASE_PATH", filepath.Join(dataDir, "brclio-mail.db")),
-		HTTPAddr:           env("BRCLIO_HTTP_ADDR", ":8080"),
-		HTTPSAddr:          env("BRCLIO_HTTPS_ADDR", ":8443"),
-		ACMEHTTPAddr:       env("BRCLIO_ACME_HTTP_ADDR", ":8080"),
-		SMTPAddr:           env("BRCLIO_SMTP_ADDR", ":2525"),
-		SubmissionAddr:     env("BRCLIO_SUBMISSION_ADDR", ":2587"),
-		SMTPSAddr:          env("BRCLIO_SMTPS_ADDR", ":2465"),
-		IMAPAddr:           env("BRCLIO_IMAP_ADDR", ""),
-		IMAPSAddr:          env("BRCLIO_IMAPS_ADDR", ":2993"),
-		Hostname:           strings.ToLower(env("BRCLIO_HOSTNAME", "mail.localhost")),
-		BaseURL:            strings.TrimRight(env("BRCLIO_BASE_URL", "http://localhost:8080"), "/"),
-		TLSCertPath:        os.Getenv("BRCLIO_TLS_CERT"),
-		TLSKeyPath:         os.Getenv("BRCLIO_TLS_KEY"),
-		AutoTLS:            envBool("BRCLIO_AUTO_TLS", false),
-		ACMEEmail:          strings.TrimSpace(os.Getenv("BRCLIO_ACME_EMAIL")),
-		SetupToken:         setupToken,
-		BootstrapEmail:     strings.ToLower(strings.TrimSpace(os.Getenv("BRCLIO_BOOTSTRAP_EMAIL"))),
-		BootstrapPassword:  bootstrapPassword,
-		RelayAddr:          strings.TrimSpace(os.Getenv("BRCLIO_RELAY_ADDR")),
-		RelayUsername:      strings.TrimSpace(os.Getenv("BRCLIO_RELAY_USERNAME")),
-		RelayPassword:      relayPassword,
-		RelayImplicitTLS:   envBool("BRCLIO_RELAY_IMPLICIT_TLS", false),
-		DirectDelivery:     envBool("BRCLIO_DIRECT_DELIVERY", false),
-		DevMode:            envBool("BRCLIO_DEV_MODE", false),
-		DisableMailServers: envBool("BRCLIO_DISABLE_MAIL_SERVERS", false),
-		MaxMessageBytes:    envInt64("BRCLIO_MAX_MESSAGE_BYTES", 25*1024*1024),
-		MaxArchiveBytes:    envInt64("BRCLIO_MAX_ARCHIVE_BYTES", 100*1024*1024*1024),
-		MinFreeDiskBytes:   envInt64("BRCLIO_MIN_FREE_DISK_BYTES", 1024*1024*1024),
-		SessionTTL:         envDuration("BRCLIO_SESSION_TTL", 7*24*time.Hour),
-		QueuePollInterval:  envDuration("BRCLIO_QUEUE_POLL_INTERVAL", 30*time.Second),
-		QueueMaxAttempts:   int(envInt64("BRCLIO_QUEUE_MAX_ATTEMPTS", 12)),
+		DataDir:           dataDir,
+		DatabasePath:      env("BRCLIO_DATABASE_PATH", filepath.Join(dataDir, "brclio-mail.db")),
+		HTTPAddr:          env("BRCLIO_HTTP_ADDR", ":8080"),
+		HTTPSAddr:         env("BRCLIO_HTTPS_ADDR", ":8443"),
+		ACMEHTTPAddr:      env("BRCLIO_ACME_HTTP_ADDR", ":8080"),
+		SMTPAddr:          env("BRCLIO_SMTP_ADDR", ":2525"),
+		SubmissionAddr:    env("BRCLIO_SUBMISSION_ADDR", ":2587"),
+		SMTPSAddr:         env("BRCLIO_SMTPS_ADDR", ":2465"),
+		IMAPAddr:          env("BRCLIO_IMAP_ADDR", ""),
+		IMAPSAddr:         env("BRCLIO_IMAPS_ADDR", ":2993"),
+		Hostname:          strings.ToLower(env("BRCLIO_HOSTNAME", "mail.localhost")),
+		BaseURL:           strings.TrimRight(env("BRCLIO_BASE_URL", "http://localhost:8080"), "/"),
+		TLSCertPath:       os.Getenv("BRCLIO_TLS_CERT"),
+		TLSKeyPath:        os.Getenv("BRCLIO_TLS_KEY"),
+		ACMEEmail:         strings.TrimSpace(os.Getenv("BRCLIO_ACME_EMAIL")),
+		SetupToken:        setupToken,
+		BootstrapEmail:    strings.ToLower(strings.TrimSpace(os.Getenv("BRCLIO_BOOTSTRAP_EMAIL"))),
+		BootstrapPassword: bootstrapPassword,
+		RelayAddr:         strings.TrimSpace(os.Getenv("BRCLIO_RELAY_ADDR")),
+		RelayUsername:     strings.TrimSpace(os.Getenv("BRCLIO_RELAY_USERNAME")),
+		RelayPassword:     relayPassword,
 	}
+	if cfg.AutoTLS, err = envBool("BRCLIO_AUTO_TLS", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.RelayImplicitTLS, err = envBool("BRCLIO_RELAY_IMPLICIT_TLS", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.DirectDelivery, err = envBool("BRCLIO_DIRECT_DELIVERY", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.DevMode, err = envBool("BRCLIO_DEV_MODE", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.DisableMailServers, err = envBool("BRCLIO_DISABLE_MAIL_SERVERS", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.MaxMessageBytes, err = envInt64("BRCLIO_MAX_MESSAGE_BYTES", 25*1024*1024); err != nil {
+		return Config{}, err
+	}
+	if cfg.MaxArchiveBytes, err = envInt64("BRCLIO_MAX_ARCHIVE_BYTES", 100*1024*1024*1024); err != nil {
+		return Config{}, err
+	}
+	if cfg.MinFreeDiskBytes, err = envInt64("BRCLIO_MIN_FREE_DISK_BYTES", 1024*1024*1024); err != nil {
+		return Config{}, err
+	}
+	if cfg.SessionTTL, err = envDuration("BRCLIO_SESSION_TTL", 7*24*time.Hour); err != nil {
+		return Config{}, err
+	}
+	if cfg.QueuePollInterval, err = envDuration("BRCLIO_QUEUE_POLL_INTERVAL", 30*time.Second); err != nil {
+		return Config{}, err
+	}
+	if cfg.BackupTimeout, err = envDuration("BRCLIO_BACKUP_TIMEOUT", 2*time.Hour); err != nil {
+		return Config{}, err
+	}
+	if cfg.BackupTimeout < time.Minute {
+		return Config{}, errors.New("BRCLIO_BACKUP_TIMEOUT must be at least 1m")
+	}
+	queueMaxAttempts, err := envInt64("BRCLIO_QUEUE_MAX_ATTEMPTS", 12)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.QueueMaxAttempts = int(queueMaxAttempts)
 
 	if cfg.MaxMessageBytes < 1024 {
 		return Config{}, errors.New("BRCLIO_MAX_MESSAGE_BYTES must be at least 1024")
@@ -115,8 +147,16 @@ func Load() (Config, error) {
 	if cfg.BootstrapEmail != "" && cfg.BootstrapPassword == "" {
 		return Config{}, errors.New("BRCLIO_BOOTSTRAP_PASSWORD is required with BRCLIO_BOOTSTRAP_EMAIL")
 	}
-	if cfg.BootstrapPassword != "" && len(cfg.BootstrapPassword) < 12 {
-		return Config{}, errors.New("BRCLIO_BOOTSTRAP_PASSWORD must contain at least 12 characters")
+	if cfg.BootstrapPassword != "" {
+		if !utf8.ValidString(cfg.BootstrapPassword) {
+			return Config{}, errors.New("BRCLIO_BOOTSTRAP_PASSWORD must be valid UTF-8")
+		}
+		if len(cfg.BootstrapPassword) > 1024 {
+			return Config{}, errors.New("BRCLIO_BOOTSTRAP_PASSWORD must not exceed 1024 bytes")
+		}
+		if utf8.RuneCountInString(cfg.BootstrapPassword) < 12 {
+			return Config{}, errors.New("BRCLIO_BOOTSTRAP_PASSWORD must contain at least 12 characters")
+		}
 	}
 	if !cfg.DevMode && cfg.SetupToken == "" && cfg.BootstrapEmail == "" {
 		return Config{}, errors.New("production startup requires BRCLIO_SETUP_TOKEN(_FILE) or bootstrap credentials")
@@ -154,40 +194,43 @@ func env(key, fallback string) string {
 	return fallback
 }
 
-func envBool(key string, fallback bool) bool {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
+func envBool(key string, fallback bool) (bool, error) {
+	raw, exists := os.LookupEnv(key)
+	if !exists {
+		return fallback, nil
 	}
+	value := strings.TrimSpace(raw)
 	parsed, err := strconv.ParseBool(value)
 	if err != nil {
-		return fallback
+		return false, fmt.Errorf("%s must be a boolean, got %q", key, raw)
 	}
-	return parsed
+	return parsed, nil
 }
 
-func envInt64(key string, fallback int64) int64 {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
+func envInt64(key string, fallback int64) (int64, error) {
+	raw, exists := os.LookupEnv(key)
+	if !exists {
+		return fallback, nil
 	}
+	value := strings.TrimSpace(raw)
 	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
-		return fallback
+		return 0, fmt.Errorf("%s must be a base-10 integer, got %q", key, raw)
 	}
-	return parsed
+	return parsed, nil
 }
 
-func envDuration(key string, fallback time.Duration) time.Duration {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
+func envDuration(key string, fallback time.Duration) (time.Duration, error) {
+	raw, exists := os.LookupEnv(key)
+	if !exists {
+		return fallback, nil
 	}
+	value := strings.TrimSpace(raw)
 	parsed, err := time.ParseDuration(value)
 	if err != nil {
-		return fallback
+		return 0, fmt.Errorf("%s must be a duration such as 30s or 168h, got %q", key, raw)
 	}
-	return parsed
+	return parsed, nil
 }
 
 func secretEnv(key string) (string, error) {

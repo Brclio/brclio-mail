@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+case "${1:-}" in
+  version)
+    printf 'brclio-mail ci-failing-doctor (test fixture)\n'
+    ;;
+  doctor)
+    printf 'intentional doctor failure for rollback verification\n' >&2
+    exit 42
+    ;;
+  *)
+    printf 'this test fixture only supports version and doctor\n' >&2
+    exit 43
+    ;;
+esac

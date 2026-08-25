@@ -3,7 +3,9 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func cleanEnvironment(t *testing.T) {
@@ -16,10 +18,21 @@ func cleanEnvironment(t *testing.T) {
 		"BRCLIO_BOOTSTRAP_PASSWORD_FILE", "BRCLIO_RELAY_ADDR", "BRCLIO_RELAY_USERNAME", "BRCLIO_RELAY_PASSWORD",
 		"BRCLIO_RELAY_PASSWORD_FILE", "BRCLIO_RELAY_IMPLICIT_TLS", "BRCLIO_DIRECT_DELIVERY", "BRCLIO_DEV_MODE",
 		"BRCLIO_DISABLE_MAIL_SERVERS", "BRCLIO_MAX_MESSAGE_BYTES", "BRCLIO_SESSION_TTL", "BRCLIO_QUEUE_POLL_INTERVAL",
+		"BRCLIO_BACKUP_TIMEOUT",
 		"BRCLIO_MAX_ARCHIVE_BYTES", "BRCLIO_QUEUE_MAX_ATTEMPTS",
 		"BRCLIO_MIN_FREE_DISK_BYTES",
 	} {
-		t.Setenv(key, "")
+		value, existed := os.LookupEnv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if existed {
+				_ = os.Setenv(key, value)
+			} else {
+				_ = os.Unsetenv(key)
+			}
+		})
 	}
 }
 
@@ -43,6 +56,38 @@ func TestLoadReadsSecretsFromFiles(t *testing.T) {
 	if cfg.MinFreeDiskBytes != 1024*1024*1024 {
 		t.Fatalf("unexpected disk reserve: %d", cfg.MinFreeDiskBytes)
 	}
+	if cfg.AutoTLS || cfg.MaxMessageBytes != 25*1024*1024 || cfg.SessionTTL != 7*24*time.Hour || cfg.BackupTimeout != 2*time.Hour {
+		t.Fatalf("unset typed environment variables did not use defaults: %#v", cfg)
+	}
+}
+
+func TestLoadRejectsExplicitInvalidTypedEnvironment(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+		kind  string
+	}{
+		{name: "boolean", key: "BRCLIO_AUTO_TLS", value: "tru", kind: "boolean"},
+		{name: "integer", key: "BRCLIO_MAX_MESSAGE_BYTES", value: "25MiB", kind: "base-10 integer"},
+		{name: "duration", key: "BRCLIO_SESSION_TTL", value: "one week", kind: "duration"},
+		{name: "explicit empty", key: "BRCLIO_QUEUE_POLL_INTERVAL", value: " ", kind: "duration"},
+		{name: "backup duration", key: "BRCLIO_BACKUP_TIMEOUT", value: "forever", kind: "duration"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cleanEnvironment(t)
+			t.Setenv("BRCLIO_SETUP_TOKEN", "one-time-setup-token")
+			t.Setenv(test.key, test.value)
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("expected %s=%q to fail", test.key, test.value)
+			}
+			if !strings.Contains(err.Error(), test.key) || !strings.Contains(err.Error(), test.kind) || !strings.Contains(err.Error(), test.value) {
+				t.Fatalf("unclear typed environment error: %v", err)
+			}
+		})
+	}
 }
 
 func TestLoadRejectsConflictingSecretSources(t *testing.T) {
@@ -55,6 +100,19 @@ func TestLoadRejectsConflictingSecretSources(t *testing.T) {
 	t.Setenv("BRCLIO_SETUP_TOKEN_FILE", secretPath)
 	if _, err := Load(); err == nil {
 		t.Fatal("expected conflicting secret sources to fail")
+	}
+}
+
+func TestLoadCountsBootstrapPasswordCharacters(t *testing.T) {
+	cleanEnvironment(t)
+	t.Setenv("BRCLIO_BOOTSTRAP_EMAIL", "admin@example.com")
+	t.Setenv("BRCLIO_BOOTSTRAP_PASSWORD", "密码密码密码密码")
+	if _, err := Load(); err == nil {
+		t.Fatal("four multibyte characters bypassed the bootstrap password minimum")
+	}
+	t.Setenv("BRCLIO_BOOTSTRAP_PASSWORD", "密码密码密码密码密码密码")
+	if _, err := Load(); err != nil {
+		t.Fatalf("twelve-character bootstrap password was rejected: %v", err)
 	}
 }
 

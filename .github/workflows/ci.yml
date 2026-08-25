@@ -42,6 +42,9 @@ jobs:
           files="$(gofmt -l $(find . -type f -name '*.go' -not -path './vendor/*'))"
           test -z "${files}" || { printf '%s\n' "${files}"; exit 1; }
 
+      - name: Check direct systemd package
+        run: make systemd-package-check
+
       - name: Run tests
         run: go test ./...
 
@@ -81,3 +84,32 @@ jobs:
             --build-arg COMMIT="${GITHUB_SHA}" \
             --build-arg BUILD_DATE="${build_date}" \
             -t brclio-mail:ci .
+
+  bare-metal:
+    name: Bare-metal systemd integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Go 1.26.6
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.26.6
+          cache: true
+
+      - name: Install bare-metal verification dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+
+      - name: Build integration binary
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+            -ldflags="-s -w -X main.version=ci-systemd -X main.commit=${GITHUB_SHA} -X main.buildDate=ci" \
+            -o dist/brclio-mail ./cmd/brclio-mail
+
+      - name: Install, operate, upgrade, and verify systemd service
+        run: sudo ./scripts/ci-systemd-integration.sh "${PWD}/dist/brclio-mail"

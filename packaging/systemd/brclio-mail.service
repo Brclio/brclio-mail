@@ -1,0 +1,66 @@
+[Unit]
+Description=Brclio Mail private mail server
+Documentation=https://github.com/Brclio/brclio-mail
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=brclio-mail
+Group=brclio-mail
+WorkingDirectory=/var/lib/brclio-mail
+EnvironmentFile=/etc/brclio-mail/brclio-mail.env
+LoadCredential=setup_token:/etc/brclio-mail/secrets/setup_token
+LoadCredential=relay_password:/etc/brclio-mail/secrets/relay_password
+Environment=BRCLIO_SETUP_TOKEN_FILE=%d/setup_token
+Environment=BRCLIO_RELAY_PASSWORD_FILE=%d/relay_password
+ExecStart=/usr/local/bin/brclio-mail serve
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=90s
+TimeoutStopSec=45s
+KillSignal=SIGTERM
+UMask=0077
+
+# Brclio Mail runs unprivileged. This is the only capability required for the
+# public 25/80/443/465/587/993 listeners.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+# Persistent paths are created by the installer and remain the only writable
+# host locations after ProtectSystem=strict is enabled.
+ReadWritePaths=/var/lib/brclio-mail
+ReadOnlyPaths=/etc/brclio-mail
+StateDirectory=brclio-mail
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHostname=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LimitNOFILE=65536
+TasksMax=512
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=brclio-mail
+
+[Install]
+WantedBy=multi-user.target

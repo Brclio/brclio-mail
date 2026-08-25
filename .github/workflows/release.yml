@@ -1,0 +1,192 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate release tag
+        run: |
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]*$ ]]
+
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go 1.26.6
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.26.6
+          cache: true
+
+      - name: Verify source and systemd package
+        run: |
+          go test ./...
+          go vet ./...
+          make fmt-check third-party-notices-check systemd-package-check
+
+  build:
+    name: Build Linux ${{ matrix.arch }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: true
+      matrix:
+        arch:
+          - amd64
+          - arm64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go 1.26.6
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.26.6
+          cache: true
+
+      - name: Build release package
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          release_version="${GITHUB_REF_NAME#v}"
+          package_name="brclio-mail_${release_version}_linux_${TARGET_ARCH}"
+          package_root="dist/${package_name}"
+          mkdir -p "${package_root}/scripts"
+          CGO_ENABLED=0 GOOS=linux GOARCH="${TARGET_ARCH}" \
+            go build -buildvcs=false -trimpath \
+            -ldflags="-s -w -X main.version=${release_version} -X main.commit=${GITHUB_SHA} -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o "${package_root}/brclio-mail" ./cmd/brclio-mail
+          cp -R packaging LICENSE LICENSES NOTICE THIRD_PARTY_NOTICES "${package_root}/"
+          cp scripts/install-systemd.sh scripts/upgrade-systemd.sh scripts/uninstall-systemd.sh "${package_root}/scripts/"
+          sed -i -E \
+            "s|^readonly default_version=.*$|readonly default_version=\"${GITHUB_REF_NAME}\"|" \
+            "${package_root}/scripts/install-systemd.sh"
+          grep -Fx "readonly default_version=\"${GITHUB_REF_NAME}\"" \
+            "${package_root}/scripts/install-systemd.sh"
+          tar -C dist -czf "dist/${package_name}.tar.gz" "${package_name}"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: brclio-mail-linux-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  package-smoke:
+    name: Verify release artifacts before publication
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Inspect both archives and install the native package
+        run: |
+          release_version="${GITHUB_REF_NAME#v}"
+          for architecture in amd64 arm64; do
+            archive="dist/brclio-mail_${release_version}_linux_${architecture}.tar.gz"
+            package_name="brclio-mail_${release_version}_linux_${architecture}"
+            test -s "${archive}"
+            tar -tzf "${archive}" | \
+              grep -Fx "${package_name}/scripts/install-systemd.sh"
+            tar -tzf "${archive}" | \
+              grep -Fx "${package_name}/packaging/systemd/brclio-mail.service"
+            architecture_root="${RUNNER_TEMP}/inspect-${architecture}"
+            mkdir -p "${architecture_root}"
+            tar -xzf "${archive}" -C "${architecture_root}"
+            if [[ "${architecture}" == "amd64" ]]; then
+              readelf -h "${architecture_root}/${package_name}/brclio-mail" | \
+                grep -E 'Machine:.*Advanced Micro Devices X86-64'
+            else
+              readelf -h "${architecture_root}/${package_name}/brclio-mail" | \
+                grep -E 'Machine:.*AArch64'
+            fi
+          done
+
+          extract_root="${RUNNER_TEMP}/release-package"
+          install_root="${RUNNER_TEMP}/release-install-root"
+          mkdir -p "${extract_root}"
+          tar -xzf "dist/brclio-mail_${release_version}_linux_amd64.tar.gz" -C "${extract_root}"
+          package_root="${extract_root}/brclio-mail_${release_version}_linux_amd64"
+          BRCLIO_INSTALL_ROOT="${install_root}" \
+          BRCLIO_SKIP_USER_SETUP=1 \
+          BRCLIO_SKIP_SYSTEMCTL=1 \
+            "${package_root}/scripts/install-systemd.sh" \
+            --hostname mail.package.test \
+            --acme-email postmaster@package.test \
+            --no-start
+          "${install_root}/usr/local/bin/brclio-mail" version | \
+            grep -F "brclio-mail ${release_version}"
+
+  publish:
+    name: Publish GitHub release
+    needs: package-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz | sort -k2 > checksums.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/*.tar.gz dist/checksums.txt \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --prerelease \
+            --generate-notes \
+            --title "Brclio Mail ${GITHUB_REF_NAME}"
+
+  smoke:
+    name: Verify published bare-metal installer
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out installer
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download, verify, and stage the published release
+        env:
+          BRCLIO_INSTALL_ROOT: ${{ runner.temp }}/brclio-mail-release-root
+          BRCLIO_SKIP_USER_SETUP: "1"
+          BRCLIO_SKIP_SYSTEMCTL: "1"
+        run: |
+          ./scripts/install-systemd.sh \
+            --version "${GITHUB_REF_NAME}" \
+            --hostname mail.release.test \
+            --acme-email postmaster@release.test \
+            --no-start
+          "${BRCLIO_INSTALL_ROOT}/usr/local/bin/brclio-mail" version | \
+            grep -F "brclio-mail ${GITHUB_REF_NAME#v}"

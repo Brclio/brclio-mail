@@ -2,11 +2,11 @@
 
 ## 范围
 
-本模型覆盖公开的 Web、SMTP/Submission、IMAP、单节点 SQLite、Docker 主机、DNS/证书、smarthost 和备份。它不是渗透测试、形式化证明或合规认证。
+本模型覆盖公开的 Web、SMTP/Submission、IMAP、单节点 SQLite、首选的 Linux/systemd 裸机部署、可选 Docker 主机、DNS/证书、smarthost 和备份。它不是渗透测试、形式化证明或合规认证。
 
 需要保护的主要资产：邮件正文与附件、envelope/Bcc 元数据、账号与会话、应用密码、DKIM/relay/TLS 私钥、管理员归档、审计日志和可用性。
 
-假设主机 operator 是受信任的最高权限角色；一旦 root、Docker socket 或未加密数据库/备份被攻破，应用无法继续保证机密性或不可变性。普通管理员也被明确授权读取全部归档。
+假设主机 operator 是受信任的最高权限角色；一旦 root、system manager、可选 Docker socket 或未加密数据库/备份被攻破，应用无法继续保证机密性或不可变性。普通管理员也被明确授权读取全部归档。
 
 ## 已实现的安全边界
 
@@ -21,6 +21,7 @@
 | 恶意邮件 HTML | 服务端和浏览器端进行 HTML 清理，浏览器阻止远程图片和危险元素；仍需持续安全测试 |
 | 资源滥用 | 默认 25 MiB 消息上限、100 收件人/MIME 附件/邮箱目录上限、协议超时、SMTP/IMAP 全局与来源连接上限、Web 会话上限、用户逻辑配额、归档保守物理估算上限和 1 GiB 数据卷低水位 |
 | 普通用户删除归档 | 用户 mailbox entry 与规范化消息分离；归档正文/附件访问要求原因并写审计事件 |
+| 裸机服务越权 | systemd 固定无登录服务账号，只授予 `CAP_NET_BIND_SERVICE`；secret 内容不写入环境文件，root-only 源文件通过 `LoadCredential` 提供；主服务不能写 root 管理的本机备份库 |
 | 容器越权 | Compose 使用非 root、只读根文件系统、drop all capabilities、no-new-privileges 与 PID 上限 |
 | 数据库损坏 | WAL + FULL 同步、外键、最低 SQLite 版本门槛、doctor 与一致性备份 CLI |
 
@@ -46,9 +47,9 @@
 
 ### 数据静态机密性
 
-SQLite 和内置备份没有应用层加密。数据库还含 DKIM 私钥与全部管理员归档。磁盘快照、备份服务、Docker volume、崩溃转储和 root 用户都可能取得内容。
+SQLite 和内置备份没有应用层加密。数据库还含 DKIM 私钥与全部管理员归档。磁盘快照、systemd 服务凭据、备份服务、可选 Docker volume、崩溃转储和 root 用户都可能取得内容。
 
-措施：宿主机全盘加密、加密异地备份、密钥分离、严格 Docker/root 权限、禁用不必要快照、明确销毁流程。全盘加密不能保护已运行且已解锁的被攻破主机。
+措施：宿主机全盘加密、加密异地备份、systemd credential 与 root-only 已发布本机备份、密钥分离、严格 root/可选 Docker 权限、禁用不必要快照、明确销毁流程。全盘加密不能保护已运行且已解锁的被攻破主机。
 
 ### 邮件传输不是端到端加密
 
@@ -70,15 +71,15 @@ SQLite 和内置备份没有应用层加密。数据库还含 DKIM 私钥与全�
 
 ### 供应链与 Preview 变更
 
-依赖、基础镜像、GitHub Actions 和 Go toolchain 都会变化；当前项目没有签名发布、SBOM、可复现构建证明或独立安全审计。
+依赖、GitHub Actions、Go toolchain 和可选基础镜像都会变化；发布包有 SHA-256 清单但尚无签名、SBOM、可复现构建证明或独立安全审计。
 
 措施：评审 lock file 和 CI 变更、运行 `govulncheck`、固定发布 digest、生成/验证 SBOM 和签名是后续路线图。不要把 `main` 的移动构建直接自动部署到关键环境。
 
 ## 部署者必须承担的控制
 
-- 只从可信来源构建，检查 Git commit 和镜像 digest；
-- 修补宿主机、Docker、Go 依赖和基础镜像；
-- 使用云安全组和主机防火墙限制管理面，保护 Docker socket；
+- 只从可信来源安装，检查 Git tag/commit、发布包 SHA-256 和可选镜像 digest；
+- 修补宿主机、systemd、Go 依赖和可选 Docker/基础镜像；
+- 使用云安全组和主机防火墙限制管理面，保护 root、unit/config/credential 和可选 Docker socket；
 - 配置并定期核验 A/AAAA、MX、PTR、SPF、DKIM、DMARC、TLS-RPT；
 - 使用强随机 setup token、每设备应用密码和加密备份；
 - 选择可信 smarthost，并明确其数据处理责任；

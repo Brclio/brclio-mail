@@ -52,6 +52,6 @@ openssl s_client -starttls smtp -connect mail.example.com:587 -servername mail.e
 - **证书不可信/主机名错误**：客户端填了邮件域而不是证书覆盖的邮件主机名，或静态证书链不完整；
 - **535/认证失败**：用户名未使用完整邮箱、应用密码抄错或已撤销；
 - **587 无法认证**：客户端没有先启用 STARTTLS；
-- **发信进入队列但不离开**：未配置 smarthost、relay 参数错误，且 direct delivery 默认关闭；在管理员队列和容器日志中查看脱敏错误。
+- **发信进入队列但不离开**：未配置 smarthost、relay 参数错误，且 direct delivery 默认关闭；在管理员队列及 systemd journal（或可选 Docker logs）中查看脱敏错误。
 
 不要通过关闭证书校验来“修复”客户端连接。

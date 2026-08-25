@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -19,14 +20,21 @@ import (
 var passwordVerificationSlots = make(chan struct{}, 2)
 
 const (
-	argonTime    = 3
-	argonMemory  = 64 * 1024
-	argonThreads = 2
-	argonKeyLen  = 32
+	argonTime        = 3
+	argonMemory      = 64 * 1024
+	argonThreads     = 2
+	argonKeyLen      = 32
+	maxPasswordBytes = 1024
 )
 
 func HashPassword(password string) (string, error) {
-	if len(password) < 12 {
+	if !utf8.ValidString(password) {
+		return "", errors.New("password must be valid UTF-8")
+	}
+	if len(password) > maxPasswordBytes {
+		return "", errors.New("password must not exceed 1024 bytes")
+	}
+	if utf8.RuneCountInString(password) < 12 {
 		return "", errors.New("password must contain at least 12 characters")
 	}
 	salt := make([]byte, 16)
@@ -43,6 +51,9 @@ func VerifyPassword(encoded, password string) bool {
 }
 
 func VerifyPasswordContext(ctx context.Context, encoded, password string) bool {
+	if !utf8.ValidString(password) || len(password) > maxPasswordBytes {
+		return false
+	}
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" || parts[2] != "v=19" {
 		return false
