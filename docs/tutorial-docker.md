@@ -1,6 +1,6 @@
 # Docker Compose 部署 Brclio Mail：独立容器教程
 
-本文面向已经拥有 Docker Engine 与 Compose v2 运维体系的用户。Docker 是 Brclio Mail 的**可选部署方式**；如果服务器不能运行 Docker，请使用[命令行/systemd 教程](tutorial-command-line.md)或[宝塔面板/systemd 教程](tutorial-baota.md)。
+本文面向已经拥有 Docker Engine 与 Compose v2 运维体系的用户。Docker 是 Brclio Mail 的**可选部署方式**；如果服务器不能运行 Docker，请使用[命令行/systemd 教程](tutorial-command-line.md)或[宝塔快速部署教程](tutorial-baota-quick.md)。
 
 Compose 方案仍然是单机、单容器、单 SQLite volume，不会因为放进 Docker 就自动获得高可用、跨主机容灾或合规归档能力。
 
@@ -898,4 +898,4 @@ sudo docker volume inspect brclio-mail-data
 
 仓库 CI 当前验证 Compose 模型与 amd64 镜像构建，但不等于已经在真实 Docker 主机完成 ACME、六端口、SMTP/IMAP、arm64 容器和收发冒烟测试；这些必须由部署者按本节验收。
 
-继续阅读：[宝塔面板部署](tutorial-baota.md) · [命令行与一键部署](tutorial-command-line.md) · [运维、备份与恢复](operations.md)
+继续阅读：[宝塔快速部署](tutorial-baota-quick.md) · [宝塔完整版](tutorial-baota.md) · [命令行与一键部署](tutorial-command-line.md) · [运维、备份与恢复](operations.md)

@@ -2,9 +2,10 @@
 
 Brclio Mail 当前是 **Preview**。先按实际服务器选择一篇独立教程：
 
-1. [宝塔面板部署](tutorial-baota.md)：用宝塔终端、防火墙和计划任务管理原生 systemd 服务。
-2. [命令行与一键部署](tutorial-command-line.md)：SSH 一次粘贴安装与完整手动流程。
-3. [Docker Compose 部署](tutorial-docker.md)：可选的单机容器路线、volume、备份与升级。
+1. [宝塔快速部署（推荐首次使用）](tutorial-baota-quick.md)：7 步完成安装、中继、启动、域名和客户端。
+2. [宝塔完整版](tutorial-baota.md)：高级证书、排错、计划备份、升级与卸载。
+3. [命令行与一键部署](tutorial-command-line.md)：SSH 一次粘贴安装与完整手动流程。
+4. [Docker Compose 部署](tutorial-docker.md)：可选的单机容器路线、volume、备份与升级。
 
 然后按顺序阅读通用参考：
 

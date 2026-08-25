@@ -8,7 +8,7 @@ Brclio Mail Preview 面向个人、家庭和完全受信任的小公司/小团�
 
 **首选部署方式是原生 Linux + systemd。** 本文主线适用于带 systemd 的 Ubuntu/Debian 与 RHEL/Rocky/AlmaLinux 等发行版；Docker Compose 保留为[可选方式](#8-可选docker-compose)，但不会改变单机边界或 Preview 成熟度。
 
-需要线性图文步骤时，直接选择：[宝塔面板部署](tutorial-baota.md)、[命令行与一键部署](tutorial-command-line.md)或[Docker Compose 部署](tutorial-docker.md)。本文继续作为 TLS、路径、端口和生命周期的详细参考。
+需要线性图文步骤时，直接选择：[宝塔一页快速版](tutorial-baota-quick.md)、[宝塔完整版](tutorial-baota.md)、[命令行与一键部署](tutorial-command-line.md)或[Docker Compose 部署](tutorial-docker.md)。本文继续作为 TLS、路径、端口和生命周期的详细参考。
 
 主机至少需要：
 

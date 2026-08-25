@@ -87,7 +87,8 @@ Docker Compose 仍是[可选部署方式](docs/deployment.md#8-可选docker-comp
 
 按实际环境选择独立图文教程：
 
-- [宝塔面板裸机部署](docs/tutorial-baota.md)
+- [宝塔快速部署（推荐首次使用）](docs/tutorial-baota-quick.md)
+- [宝塔完整版](docs/tutorial-baota.md)
 - [命令行与一键部署](docs/tutorial-command-line.md)
 - [Docker Compose 部署](docs/tutorial-docker.md)
 
@@ -133,6 +134,7 @@ curl -fsS https://mail.example.com/healthz
 
 ## 文档
 
+- [宝塔快速部署教程](docs/tutorial-baota-quick.md)
 - [宝塔面板部署教程](docs/tutorial-baota.md)
 - [命令行与一键部署教程](docs/tutorial-command-line.md)
 - [Docker Compose 部署教程](docs/tutorial-docker.md)

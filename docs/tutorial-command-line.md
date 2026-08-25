@@ -457,4 +457,4 @@ sudo ss -ltnp | grep -E ':(25|80|443|465|587|993)\b'
 
 停止写入并保留现场，不要删除 WAL 或直接修改数据库。按[运维、备份与恢复](operations.md)使用一致性快照处理。
 
-继续阅读：[宝塔面板部署](tutorial-baota.md) · [Docker Compose 部署](tutorial-docker.md) · [部署与 TLS 参考](deployment.md)
+继续阅读：[宝塔快速部署](tutorial-baota-quick.md) · [宝塔完整版](tutorial-baota.md) · [Docker Compose 部署](tutorial-docker.md) · [部署与 TLS 参考](deployment.md)
