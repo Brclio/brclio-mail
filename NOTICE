@@ -1,0 +1,74 @@
+Brclio Mail
+Copyright (c) 2026 Brclio Mail contributors
+
+MULTI-LICENSE NOTICE
+
+Brclio Mail is distributed as an aggregate containing separately licensed
+material. Preserve this NOTICE, the root LICENSE file, and the complete license
+texts under LICENSES/ when redistributing the repository or a built artifact.
+
+1. AGPL-3.0-or-later code
+
+Unless a file is listed in section 2 or carries a more specific notice, the Go
+server, protocol and storage implementation, deployment/CI files, documentation,
+and project metadata are licensed under GNU Affero General Public License v3.0
+or later (SPDX-License-Identifier: AGPL-3.0-or-later). This includes:
+
+  cmd/**
+  internal/**
+  web/embed.go
+  Dockerfile
+  docker-compose.yml
+  Makefile
+  .github/workflows/**
+  docs/**
+  README.md, CONTRIBUTING.md, SECURITY.md
+
+When users interact with a modified AGPL-covered version over a network, AGPL
+section 13 requires an opportunity to receive the Corresponding Source for that
+version. Other AGPL obligations also continue to apply. The complete text is in
+LICENSES/AGPL-3.0-or-later.txt.
+
+2. Esther UI/design layer — CC BY-NC-SA 4.0
+
+The following interface and visual-design material was created from or adapted
+using the Esther Design System (不二的个人 IP 设计系统), whose source design skill
+is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+International:
+
+  web/index.html
+  web/app.css
+  web/app.js
+  web/assets/**
+
+Attribution:
+
+  "Esther Design System（不二的个人 IP 设计系统）"
+  Original author: ESTHER不二 (esthersjw), Copyright (c) 2026.
+  Adapted for the Brclio Mail interface by Brclio Mail contributors, 2026.
+  License: CC BY-NC-SA 4.0
+  https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+This layer may be copied, shared, and adapted only under the attribution,
+NonCommercial, and ShareAlike conditions of CC BY-NC-SA 4.0. Mark modifications
+and retain the attribution and license link. The complete legal text is in
+LICENSES/CC-BY-NC-SA-4.0.txt.
+
+IMPORTANT COMMERCIAL-USE BOUNDARY
+
+CC BY-NC-SA 4.0 does not permit use primarily intended for or directed toward
+commercial advantage or monetary compensation. A commercial deployment,
+commercial hosted service, or commercial redistribution must not use the
+Esther-derived files listed above without separate permission from the relevant
+rights holder. Replace them with an independently designed UI and assets. The Go
+backend may be used commercially only in compliance with AGPL-3.0-or-later; UI
+replacement does not waive or change those AGPL obligations.
+
+3. Dependencies and trademarks
+
+Third-party Go modules retain their own copyright, license, notice, and patent
+terms. The complete notices collected for dependencies reachable by the
+production binary are distributed in THIRD_PARTY_NOTICES. Container base images
+and packages retain their own terms and image notices. No patent or trademark
+rights are granted beyond the applicable licenses. "Brclio", "Esther", and
+other names or marks remain subject to their respective owners' rights.

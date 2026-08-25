@@ -1,0 +1,27 @@
+Brclio Mail License Notice
+
+This repository contains material under more than one license. The license that
+applies is determined by the file mapping in NOTICE.
+
+1. The server, protocol, storage, infrastructure, documentation, and other
+   source code not identified as Esther-derived UI/design material are licensed
+   under the GNU Affero General Public License, version 3 or (at your option)
+   any later version (SPDX: AGPL-3.0-or-later).
+
+2. The Esther-derived UI and visual-design layer identified in NOTICE is
+   licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+   International (SPDX: CC-BY-NC-SA-4.0).
+
+The complete license texts are available at:
+
+  LICENSES/AGPL-3.0-or-later.txt
+  LICENSES/CC-BY-NC-SA-4.0.txt
+
+The CC-licensed layer is restricted to noncommercial use. Commercial users must
+replace that UI/design layer with independently created material for which they
+hold suitable rights. Replacing the UI does not remove the AGPL obligations that
+apply to the server and other AGPL-covered code.
+
+This notice is a file-level license map, not an additional permission or a
+substitute for either license's full terms. See NOTICE for attribution, scope,
+and redistribution requirements.

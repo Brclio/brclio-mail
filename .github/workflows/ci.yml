@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Go 1.26.6 verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Go 1.26.6
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.26.6
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Check third-party notices
+        run: make third-party-notices-check
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          files="$(gofmt -l $(find . -type f -name '*.go' -not -path './vendor/*'))"
+          test -z "${files}" || { printf '%s\n' "${files}"; exit 1; }
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run race tests
+        run: go test -race ./...
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Validate Docker Compose model
+        run: |
+          cp .env.example .env
+          mkdir -p secrets/tls
+          : > secrets/setup_token
+          : > secrets/relay_password
+          docker compose config --quiet
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+      - name: Build binary
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+            -ldflags="-s -w -X main.version=ci -X main.commit=${GITHUB_SHA} -X main.buildDate=ci" \
+            -o dist/brclio-mail ./cmd/brclio-mail
+          ./dist/brclio-mail version
+
+      - name: Build container
+        run: |
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          docker build \
+            --build-arg VERSION=ci \
+            --build-arg COMMIT="${GITHUB_SHA}" \
+            --build-arg BUILD_DATE="${build_date}" \
+            -t brclio-mail:ci .

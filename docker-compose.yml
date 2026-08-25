@@ -1,0 +1,89 @@
+name: brclio-mail
+
+services:
+  brclio-mail:
+    image: ${BRCLIO_IMAGE:-brclio-mail:preview}
+    build:
+      context: .
+      args:
+        VERSION: ${BRCLIO_VERSION:-0.1.0-preview}
+        COMMIT: ${BRCLIO_COMMIT:-local}
+        BUILD_DATE: ${BRCLIO_BUILD_DATE:-1970-01-01T00:00:00Z}
+    restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    stop_grace_period: 60s
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    ports:
+      - "80:8080"
+      - "443:8443"
+      - "25:2525"
+      - "465:2465"
+      - "587:2587"
+      - "993:2993"
+    environment:
+      TZ: ${TZ:-UTC}
+      BRCLIO_DATA_DIR: /data
+      BRCLIO_DATABASE_PATH: /data/brclio-mail.db
+      BRCLIO_HTTP_ADDR: :8080
+      BRCLIO_HTTPS_ADDR: :8443
+      BRCLIO_ACME_HTTP_ADDR: :8080
+      BRCLIO_SMTP_ADDR: :2525
+      BRCLIO_SMTPS_ADDR: :2465
+      BRCLIO_SUBMISSION_ADDR: :2587
+      BRCLIO_IMAP_ADDR: ""
+      BRCLIO_IMAPS_ADDR: :2993
+      BRCLIO_HOSTNAME: ${BRCLIO_HOSTNAME:?set BRCLIO_HOSTNAME in .env}
+      BRCLIO_BASE_URL: ${BRCLIO_BASE_URL:?set BRCLIO_BASE_URL in .env}
+      BRCLIO_AUTO_TLS: ${BRCLIO_AUTO_TLS:-true}
+      BRCLIO_ACME_EMAIL: ${BRCLIO_ACME_EMAIL:-}
+      BRCLIO_TLS_CERT: ${BRCLIO_TLS_CERT:-}
+      BRCLIO_TLS_KEY: ${BRCLIO_TLS_KEY:-}
+      BRCLIO_SETUP_TOKEN_FILE: /run/secrets/setup_token
+      BRCLIO_RELAY_ADDR: ${BRCLIO_RELAY_ADDR:-}
+      BRCLIO_RELAY_USERNAME: ${BRCLIO_RELAY_USERNAME:-}
+      BRCLIO_RELAY_PASSWORD_FILE: /run/secrets/relay_password
+      BRCLIO_RELAY_IMPLICIT_TLS: ${BRCLIO_RELAY_IMPLICIT_TLS:-false}
+      BRCLIO_DIRECT_DELIVERY: ${BRCLIO_DIRECT_DELIVERY:-false}
+      BRCLIO_DEV_MODE: "false"
+      BRCLIO_DISABLE_MAIL_SERVERS: "false"
+      BRCLIO_MAX_MESSAGE_BYTES: ${BRCLIO_MAX_MESSAGE_BYTES:-26214400}
+      BRCLIO_MAX_ARCHIVE_BYTES: ${BRCLIO_MAX_ARCHIVE_BYTES:-107374182400}
+      BRCLIO_MIN_FREE_DISK_BYTES: ${BRCLIO_MIN_FREE_DISK_BYTES:-1073741824}
+      BRCLIO_SESSION_TTL: ${BRCLIO_SESSION_TTL:-168h}
+      BRCLIO_QUEUE_POLL_INTERVAL: ${BRCLIO_QUEUE_POLL_INTERVAL:-30s}
+      BRCLIO_QUEUE_MAX_ATTEMPTS: ${BRCLIO_QUEUE_MAX_ATTEMPTS:-12}
+    volumes:
+      - brclio-mail-data:/data
+      - ./secrets/tls:/run/tls:ro
+    secrets:
+      - setup_token
+      - relay_password
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8443"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+volumes:
+  brclio-mail-data:
+    name: brclio-mail-data
+
+secrets:
+  setup_token:
+    file: ${BRCLIO_SETUP_TOKEN_FILE:-./secrets/setup_token}
+  relay_password:
+    file: ${BRCLIO_RELAY_PASSWORD_FILE:-./secrets/relay_password}

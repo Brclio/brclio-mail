@@ -1,0 +1,25 @@
+# Runtime data and secrets
+/data/
+/secrets/
+/backups/
+/.env
+/*.db
+/*.db-shm
+/*.db-wal
+/*.sqlite
+/*.sqlite-shm
+/*.sqlite-wal
+/*.pem
+
+# Build and test output
+/bin/
+/dist/
+/coverage.out
+/tmp/
+/output/
+/.playwright-cli/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/

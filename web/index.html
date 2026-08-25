@@ -1,0 +1,1085 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#fefcf6" />
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="Brclio Mail，一套可自托管的私人邮件系统。"
+    />
+    <title>Brclio Mail</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23F4D758'/%3E%3Cpath d='M21 16h13c9 0 14 4 14 11 0 4-2 7-6 9 5 1 8 5 8 10 0 8-6 12-16 12H21V16Zm11 17c5 0 7-2 7-5s-2-5-7-5h-2v10h2Zm2 18c5 0 7-2 7-6 0-3-2-5-7-5h-4v11h4Z' fill='%231A1A2E'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <!--
+    UI derived from ESTHER不二 / esthersjw Esther Design System.
+    Source: https://github.com/esthersjw/esther-design-system
+    License: CC BY-NC-SA 4.0. Keep attribution when redistributing this UI.
+  -->
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <div id="boot-screen" class="boot-screen" role="status" aria-live="polite">
+      <div class="brand-mark" aria-hidden="true">B</div>
+      <p>正在连接你的私人邮局…</p>
+      <span class="loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+
+    <section
+      id="connection-view"
+      class="auth-view"
+      hidden
+      aria-labelledby="connection-title"
+    >
+      <div class="auth-story">
+        <p class="eyebrow">PRIVATE POST OFFICE</p>
+        <h1 id="connection-title">暂时联系不上邮局</h1>
+        <p id="connection-message">请确认服务已经启动，然后重新连接。</p>
+        <button
+          id="retry-connection"
+          class="button button-primary"
+          type="button"
+        >
+          重新连接
+        </button>
+      </div>
+      <div class="auth-visual" aria-hidden="true">
+        <img src="/assets/private-post-office.png" alt="" />
+      </div>
+    </section>
+
+    <section
+      id="setup-view"
+      class="auth-view"
+      hidden
+      aria-labelledby="setup-title"
+    >
+      <div class="auth-story">
+        <p class="eyebrow">FIRST DELIVERY · 01</p>
+        <h1 id="setup-title">先把邮局的钥匙交给你</h1>
+        <p>
+          只需创建首位管理员。域名解析、邮箱和第三方客户端可在进入后台后继续配置。
+        </p>
+        <ol class="setup-steps">
+          <li><span>1</span><strong>创建管理员</strong></li>
+          <li><span>2</span><strong>验证邮件域名</strong></li>
+          <li><span>3</span><strong>寄出第一封信</strong></li>
+        </ol>
+      </div>
+      <div class="auth-card">
+        <img
+          class="auth-illustration"
+          src="/assets/private-post-office.png"
+          alt="一间温暖的私人邮局插画"
+        />
+        <form id="setup-form" class="form-stack" novalidate>
+          <div class="field">
+            <label for="setup-token">初始化令牌</label>
+            <input
+              id="setup-token"
+              name="setupToken"
+              type="password"
+              autocomplete="one-time-code"
+            />
+            <p class="field-help">
+              若部署时设置了 BRCLIO_SETUP_TOKEN，请在这里填写。
+            </p>
+          </div>
+          <div class="field">
+            <label for="setup-domain">首个邮件域名</label>
+            <input
+              id="setup-domain"
+              name="domain"
+              type="text"
+              inputmode="url"
+              autocomplete="off"
+              placeholder="example.com"
+              required
+            />
+            <p class="field-help">只填写裸域名；DNS 记录会在管理端生成。</p>
+          </div>
+          <div class="field">
+            <label for="setup-name">管理员称呼</label>
+            <input
+              id="setup-name"
+              name="displayName"
+              type="text"
+              autocomplete="name"
+              maxlength="80"
+              placeholder="例如：邮局管理员"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="setup-email">管理员邮箱</label>
+            <input
+              id="setup-email"
+              name="email"
+              type="email"
+              autocomplete="username"
+              placeholder="admin@example.com"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="setup-password">登录密码</label>
+            <input
+              id="setup-password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              minlength="12"
+              required
+              aria-describedby="setup-password-help"
+            />
+            <p id="setup-password-help" class="field-help">
+              至少 12 个字符，建议使用密码管理器生成。
+            </p>
+          </div>
+          <div class="field">
+            <label for="setup-confirm">再次输入密码</label>
+            <input
+              id="setup-confirm"
+              name="confirmPassword"
+              type="password"
+              autocomplete="new-password"
+              minlength="12"
+              required
+            />
+          </div>
+          <p id="setup-error" class="form-error" role="alert" hidden></p>
+          <button class="button button-primary button-block" type="submit">
+            创建并进入邮局
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <section
+      id="login-view"
+      class="auth-view"
+      hidden
+      aria-labelledby="login-title"
+    >
+      <div class="auth-story">
+        <p class="eyebrow">BRCLIO MAIL</p>
+        <h1 id="login-title">欢迎回到你的私人邮局</h1>
+        <p>邮件保存在自己的服务器里。使用邮箱地址登录，继续处理今天的往来。</p>
+        <div class="privacy-note">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path
+              d="M12 3 4.5 6v5.7c0 4.7 3.2 7.7 7.5 9.3 4.3-1.6 7.5-4.6 7.5-9.3V6L12 3Zm0 4.1 4.5 1.8v2.8c0 3-1.7 5-4.5 6.3-2.8-1.3-4.5-3.3-4.5-6.3V8.9L12 7.1Z"
+            />
+          </svg>
+          <p>
+            <strong>关于管理员留存</strong
+            ><span
+              >经本系统收发的邮件在用户删除后仍可由管理员按审计规则查阅。</span
+            >
+          </p>
+        </div>
+      </div>
+      <div class="auth-card">
+        <img
+          class="auth-illustration"
+          src="/assets/private-post-office.png"
+          alt="一间温暖的私人邮局插画"
+        />
+        <form id="login-form" class="form-stack" novalidate>
+          <div class="field">
+            <label for="login-email">邮箱地址</label>
+            <input
+              id="login-email"
+              name="email"
+              type="email"
+              autocomplete="username"
+              placeholder="you@example.com"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="login-password">密码</label>
+            <input
+              id="login-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+          <p id="login-error" class="form-error" role="alert" hidden></p>
+          <button class="button button-primary button-block" type="submit">
+            进入邮箱
+          </button>
+        </form>
+        <p class="auth-footnote">
+          第三方客户端请使用“客户端密码”，不要复用登录密码。
+        </p>
+      </div>
+    </section>
+
+    <div id="app-shell" class="app-shell" hidden>
+      <header class="app-header" aria-label="应用页眉">
+        <button
+          id="sidebar-toggle"
+          class="icon-button mobile-only"
+          type="button"
+          aria-label="打开导航"
+          aria-controls="primary-sidebar"
+          aria-expanded="false"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <button
+          id="brand-home"
+          class="brand-button"
+          type="button"
+          aria-label="Brclio Mail，返回收件箱"
+        >
+          <span class="brand-mark" aria-hidden="true">B</span>
+          <span
+            ><strong>Brclio Mail</strong
+            ><small>private post office</small></span
+          >
+        </button>
+
+        <form
+          id="global-search"
+          class="global-search"
+          role="search"
+          aria-label="搜索邮件"
+        >
+          <button class="search-submit" type="submit" aria-label="搜索邮件">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4 4" />
+            </svg>
+          </button>
+          <label class="sr-only" for="search-input">搜索邮件</label>
+          <input
+            id="search-input"
+            name="q"
+            type="search"
+            autocomplete="off"
+            placeholder="搜索发件人、主题或正文  /"
+          />
+          <kbd aria-hidden="true">/</kbd>
+        </form>
+
+        <div class="header-actions">
+          <div
+            id="mode-switch"
+            class="mode-switch"
+            role="group"
+            hidden
+            aria-label="工作区切换"
+          >
+            <button class="mode-button active" type="button" data-mode="mail">
+              邮箱
+            </button>
+            <button class="mode-button" type="button" data-mode="admin">
+              管理
+            </button>
+          </div>
+          <button
+            id="compose-trigger"
+            class="button button-primary compose-button"
+            type="button"
+            aria-label="写邮件"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path
+                d="m14.7 5.3 4 4M4 20l3.8-.8L19.4 7.6a2 2 0 0 0-2.8-2.8L5 16.4 4 20Z"
+              />
+            </svg>
+            <span>写邮件</span>
+          </button>
+          <button
+            id="account-trigger"
+            class="avatar-button"
+            type="button"
+            aria-label="账号与客户端设置"
+            aria-haspopup="dialog"
+          >
+            <span id="avatar-initials" aria-hidden="true">邮</span>
+            <span id="header-user-name" class="desktop-user-name"></span>
+          </button>
+        </div>
+      </header>
+
+      <div id="sidebar-scrim" class="sidebar-scrim" hidden></div>
+      <aside id="primary-sidebar" class="app-sidebar" aria-label="主要导航">
+        <nav
+          id="mail-navigation"
+          class="sidebar-navigation"
+          aria-label="邮箱文件夹"
+        >
+          <button
+            class="sidebar-item active"
+            type="button"
+            data-mailbox="INBOX"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M4 5h16v14H4zM4 13h4l2 3h4l2-3h4" />
+            </svg>
+            <span>收件箱</span><b data-count="INBOX"></b>
+          </button>
+          <button class="sidebar-item" type="button" data-mailbox="Starred">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path
+                d="m12 3 2.7 5.5 6 .9-4.3 4.2 1 5.9-5.4-2.9-5.4 2.9 1-5.9-4.3-4.2 6-.9L12 3Z"
+              />
+            </svg>
+            <span>已加星</span><b data-count="Starred"></b>
+          </button>
+          <button class="sidebar-item" type="button" data-mailbox="Drafts">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M5 4h11l3 3v13H5zM8 11h8M8 15h6" />
+            </svg>
+            <span>草稿</span><b data-count="Drafts"></b>
+          </button>
+          <button class="sidebar-item" type="button" data-mailbox="Sent">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="m3 11 17-7-7 17-2.2-7.8L3 11Zm7.8 2.2L15 9" />
+            </svg>
+            <span>已发送</span><b data-count="Sent"></b>
+          </button>
+          <button class="sidebar-item" type="button" data-mailbox="Archive">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M4 8h16v12H4zM3 4h18v4H3zM9 12h6" />
+            </svg>
+            <span>归档</span><b data-count="Archive"></b>
+          </button>
+          <button class="sidebar-item" type="button" data-mailbox="Junk">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path
+                d="M12 3 4 7v5c0 4.8 3.4 7.8 8 9 4.6-1.2 8-4.2 8-9V7l-8-4Zm0 5v5m0 3h.01"
+              />
+            </svg>
+            <span>垃圾邮件</span><b data-count="Junk"></b>
+          </button>
+          <button class="sidebar-item" type="button" data-mailbox="Trash">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5m4-5v5" />
+            </svg>
+            <span>垃圾箱</span><b data-count="Trash"></b>
+          </button>
+        </nav>
+
+        <nav
+          id="admin-navigation"
+          class="sidebar-navigation"
+          aria-label="管理员功能"
+          hidden
+        >
+          <p class="sidebar-label">ADMIN DESK</p>
+          <button
+            class="sidebar-item active"
+            type="button"
+            data-admin-section="overview"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M4 13h6v7H4zM14 4h6v16h-6zM4 4h6v5H4z" /></svg
+            ><span>概览</span>
+          </button>
+          <button
+            class="sidebar-item"
+            type="button"
+            data-admin-section="domains"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></svg
+            ><span>域名与 DNS</span>
+          </button>
+          <button class="sidebar-item" type="button" data-admin-section="users">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="9" cy="8" r="3" />
+              <path d="M3.5 20c.5-5 10.5-5 11 0M16 8h5M18.5 5.5v5" /></svg
+            ><span>邮箱账号</span>
+          </button>
+          <button
+            class="sidebar-item"
+            type="button"
+            data-admin-section="aliases"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path
+                d="M8 7h11v11H8zM5 15H3V4h11v2M11 11h5m-2.5-2.5L16 11l-2.5 2.5"
+              /></svg
+            ><span>邮箱别名</span>
+          </button>
+          <button
+            class="sidebar-item sensitive"
+            type="button"
+            data-admin-section="archive"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M4 8h16v12H4zM3 4h18v4H3zM9 12h6" />
+              <circle cx="17" cy="16" r="3" /></svg
+            ><span>留存归档</span>
+          </button>
+          <button class="sidebar-item" type="button" data-admin-section="queue">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M5 6h14M5 12h10M5 18h7" />
+              <circle cx="18" cy="17" r="3" /></svg
+            ><span>投递队列</span>
+          </button>
+          <button class="sidebar-item" type="button" data-admin-section="audit">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4" /></svg
+            ><span>审计记录</span>
+          </button>
+        </nav>
+
+        <div id="quota-card" class="quota-card">
+          <div><span>邮箱空间</span><strong id="quota-label">—</strong></div>
+          <progress
+            id="quota-progress"
+            class="quota-track"
+            aria-label="邮箱空间使用量"
+            max="100"
+            value="0"
+          >
+            0%
+          </progress>
+          <small id="quota-caption">正在读取…</small>
+        </div>
+
+        <p class="esther-credit">
+          <span aria-hidden="true">✦</span> UI inspired by ESTHER不二
+        </p>
+      </aside>
+
+      <main id="main-content" class="app-main" tabindex="-1">
+        <section id="mail-view" class="mail-workspace" aria-label="邮件">
+          <section
+            id="message-list-panel"
+            class="message-list-panel"
+            aria-labelledby="mailbox-title"
+          >
+            <header class="panel-header">
+              <div>
+                <p class="eyebrow" id="mailbox-kicker">MAILBOX</p>
+                <h1 id="mailbox-title">收件箱</h1>
+              </div>
+              <button
+                id="refresh-messages"
+                class="icon-button"
+                type="button"
+                aria-label="刷新邮件"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path
+                    d="M20 7v5h-5M4 17v-5h5M6.3 8A7 7 0 0 1 18 6l2 6M18 16a7 7 0 0 1-11.7 2L4 12"
+                  />
+                </svg>
+              </button>
+            </header>
+            <div
+              id="message-list-status"
+              class="panel-status"
+              aria-live="polite"
+            ></div>
+            <div
+              id="message-list"
+              class="message-list"
+              role="listbox"
+              aria-label="邮件列表"
+              tabindex="0"
+            ></div>
+            <nav
+              id="message-pagination"
+              class="pagination"
+              aria-label="邮件分页"
+              hidden
+            >
+              <button
+                id="previous-page"
+                class="button button-quiet button-small"
+                type="button"
+              >
+                上一页
+              </button>
+              <span id="page-label">第 1 页</span>
+              <button
+                id="next-page"
+                class="button button-quiet button-small"
+                type="button"
+              >
+                下一页
+              </button>
+            </nav>
+          </section>
+
+          <article
+            id="message-reader"
+            class="message-reader"
+            aria-labelledby="reader-subject"
+          >
+            <div id="reader-empty" class="empty-state">
+              <img
+                src="/assets/private-post-office.png"
+                alt="温暖的私人邮局里暂时没有展开的信件"
+              />
+              <p class="eyebrow">A QUIET DESK</p>
+              <h2>挑一封信，慢慢读</h2>
+              <p>
+                从左侧邮件列表选择一封邮件。你也可以按 <kbd>J</kbd> /
+                <kbd>K</kbd> 浏览。
+              </p>
+            </div>
+            <div
+              id="reader-loading"
+              class="reader-loading"
+              hidden
+              aria-live="polite"
+            >
+              <span class="spinner" aria-hidden="true"></span>
+              <p>正在拆开信封…</p>
+            </div>
+            <div id="reader-content" hidden>
+              <header class="reader-header">
+                <button
+                  id="reader-back"
+                  class="icon-button mobile-only"
+                  type="button"
+                  aria-label="返回邮件列表"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m15 5-7 7 7 7" />
+                  </svg>
+                </button>
+                <div class="reader-title-row">
+                  <div>
+                    <p id="reader-label" class="eyebrow">MESSAGE</p>
+                    <h2 id="reader-subject">邮件主题</h2>
+                  </div>
+                  <div class="reader-actions">
+                    <button
+                      id="message-star"
+                      class="icon-button"
+                      type="button"
+                      aria-label="添加星标"
+                      aria-pressed="false"
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path
+                          d="m12 3 2.7 5.5 6 .9-4.3 4.2 1 5.9-5.4-2.9-5.4 2.9 1-5.9-4.3-4.2 6-.9L12 3Z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      id="message-reply"
+                      class="icon-button"
+                      type="button"
+                      aria-label="回复"
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path
+                          d="m9 8-5 4 5 4v-3h5c3 0 5 1 6 4 0-6-3-9-8-9H9Z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      id="message-delete"
+                      class="icon-button danger"
+                      type="button"
+                      aria-label="移到垃圾箱"
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path
+                          d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5m4-5v5"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="sender-line">
+                  <span
+                    id="sender-avatar"
+                    class="sender-avatar"
+                    aria-hidden="true"
+                  ></span>
+                  <div>
+                    <strong id="reader-from"></strong
+                    ><button
+                      id="reader-details-toggle"
+                      class="text-button"
+                      type="button"
+                      aria-expanded="false"
+                    >
+                      查看详情
+                    </button>
+                  </div>
+                  <time id="reader-date"></time>
+                </div>
+                <dl id="reader-details" class="message-details" hidden></dl>
+              </header>
+              <div id="reader-attachments" class="attachment-list" hidden></div>
+              <div id="reader-body" class="message-body"></div>
+            </div>
+          </article>
+        </section>
+
+        <section
+          id="admin-view"
+          class="admin-workspace"
+          hidden
+          aria-labelledby="admin-title"
+        >
+          <header class="admin-header">
+            <div>
+              <p id="admin-kicker" class="eyebrow">ADMIN DESK</p>
+              <h1 id="admin-title">邮局概览</h1>
+              <p id="admin-description">域名、账号与投递状态都在这里。</p>
+            </div>
+            <button
+              id="admin-primary-action"
+              class="button button-primary"
+              type="button"
+              hidden
+            ></button>
+          </header>
+          <div
+            id="admin-content"
+            class="admin-content"
+            aria-live="polite"
+          ></div>
+        </section>
+      </main>
+
+      <nav class="mobile-navigation" aria-label="移动端快捷操作">
+        <button type="button" data-mobile-action="inbox" class="active">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M4 5h16v14H4zM4 13h4l2 3h4l2-3h4" /></svg
+          ><span>邮件</span>
+        </button>
+        <button type="button" data-mobile-action="search">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4 4" /></svg
+          ><span>搜索</span>
+        </button>
+        <button
+          type="button"
+          data-mobile-action="compose"
+          class="mobile-compose"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path
+              d="m14.7 5.3 4 4M4 20l3.8-.8L19.4 7.6a2 2 0 0 0-2.8-2.8L5 16.4 4 20Z"
+            /></svg
+          ><span>写信</span>
+        </button>
+        <button
+          type="button"
+          data-mobile-action="admin"
+          class="mobile-admin"
+          hidden
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h3" /></svg
+          ><span>管理</span>
+        </button>
+        <button type="button" data-mobile-action="settings">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="3" />
+            <path d="M5 20c.5-6 13.5-6 14 0" /></svg
+          ><span>设置</span>
+        </button>
+      </nav>
+    </div>
+
+    <dialog
+      id="compose-dialog"
+      class="app-dialog compose-dialog"
+      aria-labelledby="compose-title"
+    >
+      <form id="compose-form" method="dialog" novalidate>
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">NEW LETTER</p>
+            <h2 id="compose-title">写一封邮件</h2>
+          </div>
+          <button
+            class="icon-button dialog-close"
+            type="button"
+            data-close-dialog="compose-dialog"
+            aria-label="关闭写信窗口"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        <div class="compose-fields">
+          <div class="inline-field">
+            <label for="compose-to">收件人</label
+            ><input
+              id="compose-to"
+              name="to"
+              type="text"
+              autocomplete="off"
+              placeholder="name@example.com"
+              required
+            /><button
+              id="toggle-copy-fields"
+              class="text-button"
+              type="button"
+              aria-expanded="false"
+            >
+              抄送 / 密送
+            </button>
+          </div>
+          <div id="copy-fields" hidden>
+            <div class="inline-field">
+              <label for="compose-cc">抄送</label
+              ><input
+                id="compose-cc"
+                name="cc"
+                type="text"
+                autocomplete="off"
+              />
+            </div>
+            <div class="inline-field">
+              <label for="compose-bcc">密送</label
+              ><input
+                id="compose-bcc"
+                name="bcc"
+                type="text"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+          <div class="inline-field">
+            <label for="compose-subject">主题</label
+            ><input
+              id="compose-subject"
+              name="subject"
+              type="text"
+              maxlength="300"
+              placeholder="这封信是关于…"
+            />
+          </div>
+          <label class="sr-only" for="compose-body">邮件正文</label>
+          <textarea
+            id="compose-body"
+            name="body"
+            rows="14"
+            placeholder="写下想说的话…"
+          ></textarea>
+        </div>
+        <div
+          id="compose-attachments"
+          class="compose-attachments"
+          aria-live="polite"
+        ></div>
+        <p id="compose-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-footer">
+          <label
+            class="button button-quiet attachment-button"
+            for="compose-files"
+            ><svg aria-hidden="true" viewBox="0 0 24 24">
+              <path
+                d="m8 12 5.7-5.7a3 3 0 0 1 4.3 4.3l-8.5 8.5a5 5 0 0 1-7-7L11 3.6"
+              /></svg
+            ><span>添加附件</span></label
+          >
+          <input id="compose-files" type="file" multiple hidden />
+          <span
+            id="draft-status"
+            class="draft-status"
+            aria-live="polite"
+          ></span>
+          <button class="button button-primary" type="submit">发送邮件</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      id="account-dialog"
+      class="app-dialog account-dialog"
+      aria-labelledby="account-title"
+    >
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">MY POSTBOX</p>
+          <h2 id="account-title">账号与客户端</h2>
+        </div>
+        <button
+          class="icon-button dialog-close"
+          type="button"
+          data-close-dialog="account-dialog"
+          aria-label="关闭账号设置"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
+      <div id="account-summary" class="account-summary"></div>
+      <section class="settings-section" aria-labelledby="client-heading">
+        <div class="settings-heading">
+          <div>
+            <p class="eyebrow">THIRD-PARTY CLIENT</p>
+            <h3 id="client-heading">客户端密码</h3>
+          </div>
+          <button
+            id="new-app-password"
+            class="button button-quiet button-small"
+            type="button"
+          >
+            新建密码
+          </button>
+        </div>
+        <p>
+          为 Thunderbird、Apple Mail
+          等客户端单独创建密码。密码只会完整显示一次。
+        </p>
+        <div id="app-password-list" class="settings-list"></div>
+        <form id="app-password-form" class="inline-create-form" hidden>
+          <label for="app-password-name">设备名称</label>
+          <input
+            id="app-password-name"
+            name="name"
+            type="text"
+            maxlength="80"
+            placeholder="例如：MacBook Air"
+            required
+          />
+          <button class="button button-primary button-small" type="submit">
+            生成
+          </button>
+        </form>
+        <div
+          id="app-password-secret"
+          class="one-time-secret"
+          hidden
+          role="status"
+        ></div>
+      </section>
+      <section class="settings-section" aria-labelledby="protocol-heading">
+        <p class="eyebrow">CONNECTION GUIDE</p>
+        <h3 id="protocol-heading">手动连接参数</h3>
+        <dl class="protocol-grid">
+          <div>
+            <dt>收件协议</dt>
+            <dd id="protocol-imap">—</dd>
+          </div>
+          <div>
+            <dt>发件协议</dt>
+            <dd id="protocol-smtp">—</dd>
+          </div>
+          <div>
+            <dt>用户名</dt>
+            <dd id="protocol-username">—</dd>
+          </div>
+          <div>
+            <dt>密码</dt>
+            <dd>上方创建的客户端密码</dd>
+          </div>
+        </dl>
+      </section>
+      <div class="dialog-footer account-footer">
+        <button id="logout-button" class="button button-danger" type="button">
+          退出登录
+        </button>
+      </div>
+    </dialog>
+
+    <dialog
+      id="admin-form-dialog"
+      class="app-dialog admin-form-dialog"
+      aria-labelledby="admin-form-title"
+    >
+      <form id="admin-form" novalidate>
+        <div class="dialog-header">
+          <div>
+            <p id="admin-form-kicker" class="eyebrow">ADMIN ACTION</p>
+            <h2 id="admin-form-title">新建</h2>
+          </div>
+          <button
+            class="icon-button dialog-close"
+            type="button"
+            data-close-dialog="admin-form-dialog"
+            aria-label="关闭"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        <div id="admin-form-fields" class="form-stack"></div>
+        <p id="admin-form-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-footer">
+          <button
+            class="button button-quiet"
+            type="button"
+            data-close-dialog="admin-form-dialog"
+          >
+            取消</button
+          ><button class="button button-primary" type="submit">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      id="archive-reason-dialog"
+      class="app-dialog archive-dialog"
+      aria-labelledby="archive-reason-title"
+    >
+      <form id="archive-reason-form" novalidate>
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">PRIVACY CHECKPOINT</p>
+            <h2 id="archive-reason-title">说明查看理由</h2>
+          </div>
+          <button
+            class="icon-button dialog-close"
+            type="button"
+            data-close-dialog="archive-reason-dialog"
+            aria-label="关闭"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        <div class="archive-warning">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path
+              d="M12 3 4.5 6v5.7c0 4.7 3.2 7.7 7.5 9.3 4.3-1.6 7.5-4.6 7.5-9.3V6L12 3Z"
+            />
+            <path d="M9 12h6M12 9v6" />
+          </svg>
+          <p>
+            <strong>这次访问将写入审计记录</strong
+            ><span>归档仅用于授权的安全调查、数据恢复或合规处理。</span>
+          </p>
+        </div>
+        <div class="field">
+          <label for="archive-reason">查看理由</label
+          ><textarea
+            id="archive-reason"
+            name="reason"
+            rows="4"
+            minlength="6"
+            maxlength="500"
+            placeholder="请具体说明本次查看的目的…"
+            required
+          ></textarea>
+        </div>
+        <p id="archive-reason-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-footer">
+          <button
+            class="button button-quiet"
+            type="button"
+            data-close-dialog="archive-reason-dialog"
+          >
+            取消</button
+          ><button class="button button-danger" type="submit">
+            确认并查看
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      id="archive-message-dialog"
+      class="app-dialog archive-message-dialog"
+      aria-labelledby="archive-message-title"
+    >
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">RETAINED MESSAGE</p>
+          <h2 id="archive-message-title">归档邮件</h2>
+        </div>
+        <button
+          class="icon-button dialog-close"
+          type="button"
+          data-close-dialog="archive-message-dialog"
+          aria-label="关闭归档邮件"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
+      <div id="archive-message-content" class="archive-message-content"></div>
+    </dialog>
+
+    <dialog
+      id="confirm-dialog"
+      class="app-dialog confirm-dialog"
+      aria-labelledby="confirm-title"
+      aria-describedby="confirm-description"
+    >
+      <form id="confirm-form" method="dialog">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">PLEASE CONFIRM</p>
+            <h2 id="confirm-title">确认操作</h2>
+          </div>
+          <button
+            class="icon-button dialog-close"
+            type="button"
+            data-confirm-value="false"
+            aria-label="关闭"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        <p id="confirm-description" class="confirm-description"></p>
+        <div class="dialog-footer">
+          <button
+            class="button button-quiet"
+            type="button"
+            data-confirm-value="false"
+          >
+            取消</button
+          ><button
+            id="confirm-accept"
+            class="button button-danger"
+            type="submit"
+            value="true"
+          >
+            确认
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <div
+      id="toast-region"
+      class="toast-region"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+    <div
+      id="app-live-region"
+      class="sr-only"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+
+    <noscript
+      ><div class="noscript">
+        Brclio Mail 需要 JavaScript 才能显示邮箱。
+      </div></noscript
+    >
+    <script src="/app.js" defer></script>
+  </body>
+</html>
