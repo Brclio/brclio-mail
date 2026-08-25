@@ -35,6 +35,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
+wait_for_https_health() {
+  local attempt
+
+  for attempt in {1..20}; do
+    if curl --fail --silent --show-error --max-time 5 --noproxy '*' \
+      --resolve 'mail.example.test:443:127.0.0.1' \
+      https://mail.example.test/healthz >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if ! systemctl is-active --quiet brclio-mail.service; then
+      journalctl -u brclio-mail.service -n 100 --no-pager >&2 || true
+      return 1
+    fi
+    sleep 1
+  done
+
+  journalctl -u brclio-mail.service -n 100 --no-pager >&2 || true
+  return 1
+}
+
 "${repository_root}/scripts/install-systemd.sh" \
   --binary "${binary_path}" \
   --hostname mail.example.test \
@@ -83,10 +104,7 @@ update-ca-certificates >/dev/null
 systemctl daemon-reload
 systemctl enable --now brclio-mail.service
 systemctl is-active --quiet brclio-mail.service || fail "service is not active"
-
-curl --fail --silent --show-error --max-time 20 --noproxy '*' \
-  --resolve 'mail.example.test:443:127.0.0.1' \
-  https://mail.example.test/healthz >/dev/null
+wait_for_https_health || fail "HTTPS health did not become ready after installation"
 systemctl start brclio-mail-doctor.service
 
 passwd_checksum_before="$(sha256sum /etc/passwd | awk '{print $1}')"
@@ -181,18 +199,14 @@ restored_database_checksum="$(sqlite3 /var/lib/brclio-mail/brclio-mail.db '.dump
 [[ "${restored_database_checksum}" == "${rollback_snapshot_checksum}" ]] || \
   fail "doctor failure did not restore the paired pre-upgrade database"
 systemctl is-active --quiet brclio-mail.service || fail "old service was not restored after doctor failure"
-curl --fail --silent --show-error --max-time 20 --noproxy '*' \
-  --resolve 'mail.example.test:443:127.0.0.1' \
-  https://mail.example.test/healthz >/dev/null
+wait_for_https_health || fail "HTTPS health did not recover after doctor rollback"
 
 # Avoid a same-second pre-upgrade snapshot name collision in the success case.
 sleep 1
 
 "${repository_root}/scripts/upgrade-systemd.sh" --binary "${binary_path}"
 systemctl is-active --quiet brclio-mail.service || fail "service is inactive after upgrade"
-curl --fail --silent --show-error --max-time 20 --noproxy '*' \
-  --resolve 'mail.example.test:443:127.0.0.1' \
-  https://mail.example.test/healthz >/dev/null
+wait_for_https_health || fail "HTTPS health did not become ready after upgrade"
 
 "${repository_root}/scripts/uninstall-systemd.sh" >"${temporary_directory}/uninstall.log"
 [[ ! -e /usr/local/bin/brclio-mail && -f /var/lib/brclio-mail/brclio-mail.db ]] || \
@@ -206,9 +220,7 @@ BRCLIO_UPGRADE_SNAPSHOT="${recovery_snapshot}" \
 systemctl start brclio-mail-doctor.service
 systemctl enable --now brclio-mail.service
 systemctl is-active --quiet brclio-mail.service || fail "service is inactive after preserved-data reinstall"
-curl --fail --silent --show-error --max-time 20 --noproxy '*' \
-  --resolve 'mail.example.test:443:127.0.0.1' \
-  https://mail.example.test/healthz >/dev/null
+wait_for_https_health || fail "HTTPS health did not become ready after preserved-data reinstall"
 
 systemd-analyze security --no-pager brclio-mail.service | sed -n '1,12p'
 printf 'bare-metal systemd integration passed\n'
