@@ -145,7 +145,7 @@ curl -fsS https://mail.example.com/healthz
 不要无人值守地对邮件主机执行 `git pull`。先阅读目标版本变更，检出明确 tag/commit，完成一份已移出主机且验证可读的备份，然后：
 
 ```bash
-target_version="v0.2.0-preview"
+target_version="v0.2.1-preview"
 git fetch --tags
 git checkout "$target_version"
 sudo ./scripts/upgrade-systemd.sh --version "$target_version"
@@ -211,57 +211,236 @@ docker compose logs --since 30m brclio-mail
 一致性备份并复制到宿主机：
 
 ```bash
+set -Eeuo pipefail
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+backup_output="backups/brclio-mail-${stamp}.sqlite"
 docker compose exec -T brclio-mail \
   brclio-mail backup "/data/backups/brclio-mail-${stamp}.sqlite"
 mkdir -p backups
 chmod 700 backups
+[[ ! -e "$backup_output" && ! -L "$backup_output" ]] || {
+  printf 'refusing to overwrite backup output: %s\n' "$backup_output" >&2
+  exit 1
+}
 docker compose cp \
   "brclio-mail:/data/backups/brclio-mail-${stamp}.sqlite" \
-  "backups/brclio-mail-${stamp}.sqlite"
-chmod 600 "backups/brclio-mail-${stamp}.sqlite"
+  "$backup_output"
+[[ -f "$backup_output" && ! -L "$backup_output" ]] || {
+  echo 'backup export is missing, not regular, or a symbolic link' >&2
+  exit 1
+}
+chmod 600 "$backup_output"
+integrity_result="$(sqlite3 "$backup_output" 'PRAGMA integrity_check;')"
+[[ "$integrity_result" == "ok" ]] || {
+  printf 'integrity_check failed: %s\n' "$integrity_result" >&2
+  exit 1
+}
+foreign_key_violations="$(sqlite3 "$backup_output" 'PRAGMA foreign_key_check;')"
+[[ -z "$foreign_key_violations" ]] || {
+  printf 'foreign_key_check failed:\n%s\n' "$foreign_key_violations" >&2
+  exit 1
+}
+sha256sum "$backup_output"
 ```
 
-恢复前停止服务，验证备份，并确认只有目标 volume：
+导出文件和 `/data/backups/` 内快照是两份完整数据，不受邮箱归档配额限制。对宿主和 named volume 都做空间告警和保留策略。只有宿主副本与异地加密副本的 hash 均验证后，才删除精确的 volume 内快照；完整的文件名白名单和删除命令见 [Docker 教程的备份章节](tutorial-docker.md#11-备份)。升级停机后快照要保留到新版本通过真实收发和恢复演练。
+
+恢复前停止服务，验证备份，并确认没有其他运行中容器使用目标 volume：
 
 ```bash
-docker compose stop brclio-mail
+set -Eeuo pipefail
+docker compose stop -t 60 brclio-mail
 docker compose ps
+volume_users="$(docker ps -q --filter volume=brclio-mail-data)"
+[[ -z "$volume_users" ]] || {
+  printf 'volume is still used by: %s\n' "$volume_users" >&2
+  exit 1
+}
 docker volume inspect brclio-mail-data
 ```
 
-然后使用一次性 root 容器保留旧文件并替换数据库；`RESTORE_FILE` 只允许是 `backups/` 内的简单文件名：
+然后使用一次性 root 容器保留旧文件并替换数据库。恢复目录本身不能是符号链接，`restore_file` 只允许是 `backups/` 内不含 `/` 或 `..` 的简单 `.sqlite` 文件名：
 
 ```bash
+set -Eeuo pipefail
 restore_file="brclio-mail-20260825T120000Z.sqlite"
-restore_id="$(date -u +%Y%m%dT%H%M%SZ)"
-docker run --rm --user 0 \
+[[ "$restore_file" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.sqlite$ ]] || {
+  echo "invalid restore filename" >&2
+  exit 1
+}
+[[ "$restore_file" != *..* && "$restore_file" != */* ]] || {
+  echo "restore filename must be a simple basename" >&2
+  exit 1
+}
+[[ -d backups && ! -L backups ]] || {
+  echo "backups must be a real directory" >&2
+  exit 1
+}
+restore_directory="$(cd backups && pwd -P)"
+restore_source="${restore_directory}/${restore_file}"
+[[ -f "$restore_source" && ! -L "$restore_source" ]] || {
+  echo "restore source is missing, not regular, or a symbolic link" >&2
+  exit 1
+}
+if ! integrity_result="$(sqlite3 -batch -bail "$restore_source" \
+  'PRAGMA integrity_check;')"; then
+  echo 'sqlite3 integrity_check could not run' >&2
+  exit 1
+fi
+[[ "$integrity_result" == "ok" ]] || {
+  printf 'integrity_check failed: %s\n' "$integrity_result" >&2
+  exit 1
+}
+if ! foreign_key_violations="$(sqlite3 -batch -bail "$restore_source" \
+  'PRAGMA foreign_key_check;')"; then
+  echo 'sqlite3 foreign_key_check could not run' >&2
+  exit 1
+fi
+[[ -z "$foreign_key_violations" ]] || {
+  printf 'foreign_key_check failed:\n%s\n' "$foreign_key_violations" >&2
+  exit 1
+}
+
+docker compose stop -t 60 brclio-mail
+volume_users="$(docker ps -q --filter volume=brclio-mail-data)"
+[[ -z "$volume_users" ]] || {
+  printf 'volume became active again; refusing restore: %s\n' \
+    "$volume_users" >&2
+  exit 1
+}
+
+mapfile -t restore_helper_refs < <(docker compose config --images)
+[[ "${#restore_helper_refs[@]}" -eq 1 ]] || {
+  echo 'expected exactly one reviewed Compose image' >&2
+  exit 1
+}
+restore_helper_image="$(docker image inspect -f '{{.Id}}' \
+  "${restore_helper_refs[0]}")"
+[[ "$restore_helper_image" == sha256:* ]] || {
+  echo 'reviewed local restore helper image is missing' >&2
+  exit 1
+}
+
+docker run --pull never --rm --network none --read-only --pids-limit 64 \
+  --user 0 --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE \
+  --cap-add FOWNER --security-opt no-new-privileges \
   -e RESTORE_FILE="$restore_file" \
-  -e RESTORE_ID="$restore_id" \
   -v brclio-mail-data:/data \
-  -v "${PWD}/backups:/restore:ro" \
-  alpine:3.22 sh -ceu '
-    test -f "/restore/${RESTORE_FILE}"
-    mkdir -m 0700 "/data/restore-safety-${RESTORE_ID}"
+  -v "${restore_directory}:/restore:ro" \
+  --entrypoint /bin/sh "$restore_helper_image" -ceu '
+    case "${RESTORE_FILE}" in
+      "" | */* | *..*) echo "unsafe restore filename" >&2; exit 1 ;;
+    esac
+    restore_source="/restore/${RESTORE_FILE}"
+    test -f "${restore_source}"
+    test ! -L "${restore_source}"
+    safety_dir="$(mktemp -d /data/restore-safety.XXXXXXXX)"
+    chmod 0700 "${safety_dir}"
     for file in brclio-mail.db brclio-mail.db-wal brclio-mail.db-shm; do
-      if [ -e "/data/${file}" ]; then
-        mv "/data/${file}" "/data/restore-safety-${RESTORE_ID}/${file}"
+      live_path="/data/${file}"
+      if [ -e "${live_path}" ] || [ -L "${live_path}" ]; then
+        mv "${live_path}" "${safety_dir}/${file}"
       fi
     done
-    cp "/restore/${RESTORE_FILE}" /data/brclio-mail.db
+    for file in brclio-mail.db brclio-mail.db-wal brclio-mail.db-shm; do
+      test ! -e "/data/${file}"
+      test ! -L "/data/${file}"
+    done
+    cp "${restore_source}" /data/brclio-mail.db
     chown 10001:10001 /data/brclio-mail.db
     chmod 0600 /data/brclio-mail.db
+    printf "old database files preserved in %s\n" "${safety_dir}"
   '
-docker compose up -d brclio-mail
-docker compose exec -T brclio-mail brclio-mail doctor
+restore_doctor_output="$(docker compose run --pull never --rm --no-deps \
+  brclio-mail doctor)"
+printf '%s\n' "$restore_doctor_output"
+grep -F '"deliveryMode":"smarthost"' <<<"$restore_doctor_output"
+if ! docker compose up --pull never -d --no-build --wait --wait-timeout 120 \
+  brclio-mail; then
+  docker compose logs --tail 100 brclio-mail
+  docker compose stop -t 60 brclio-mail
+  echo 'restored container failed readiness and was stopped' >&2
+  exit 1
+fi
+if ! curl -fsS https://mail.example.com/healthz; then
+  docker compose stop -t 60 brclio-mail
+  echo 'restored service failed health check and was stopped' >&2
+  exit 1
+fi
 ```
 
-Compose 升级同样需要先备份、验证目标镜像/commit，并禁止新旧容器同时访问 volume：
+Compose 升级必须完整执行 [Docker 教程的安全升级流程](tutorial-docker.md#12-安全升级)。该流程会先记录匹配的旧 commit、Compose、`.env`、版本和本地镜像，且在旧服务仍在线时构建新镜像；只在停止旧服务后，才由该旧镜像+旧配置生成最终一致快照。快照导出、SQLite/FK 和 SHA-256 全部通过后才运行新 doctor，doctor 又是启动硬门禁。不要从本页摘取几条命令自行拼接升级。
+
+### Docker 升级失败回滚
+
+以下流程只适用于新版本尚未接收新邮件的失败阶段。若新服务已经开放并可能写入新邮件，先隔离、保全现场并评估增量数据，不能直接覆盖成旧快照。
+
+读取安全升级步骤生成的 `backups/upgrade-rollback-<timestamp>.txt`，不要直接 `source` 它；把八个值逐字填入下面开头。`rollback_backup` 必须是映射文件中记录的**停止旧服务后**快照，不是更早的在线灾备。先切回旧 Git commit 并与保存的 Compose 比对，再恢复旧 `.env` 并确认 Compose 解析到保留的旧镜像：
 
 ```bash
-docker compose build --pull brclio-mail
-docker compose up -d brclio-mail
-docker compose exec -T brclio-mail brclio-mail doctor
+set -Eeuo pipefail
+rollback_git_commit='0000000000000000000000000000000000000000'
+rollback_image='brclio-mail:rollback-YYYYMMDDTHHMMSSZ'
+rollback_image_id='sha256:0000000000000000000000000000000000000000000000000000000000000000'
+rollback_version='X.Y.Z'
+rollback_backup='/absolute/repo/backups/pre-upgrade-YYYYMMDDTHHMMSSZ.sqlite'
+rollback_sha256='0000000000000000000000000000000000000000000000000000000000000000'
+rollback_env='/absolute/repo/backups/compose-rollback-YYYYMMDDTHHMMSSZ.env'
+rollback_compose='/absolute/repo/backups/docker-compose-rollback-YYYYMMDDTHHMMSSZ.yml'
+
+[[ "$rollback_git_commit" =~ ^[0-9a-f]{40}$ && \
+   "$rollback_git_commit" != '0000000000000000000000000000000000000000' && \
+   "$rollback_image" != *YYYY* && "$rollback_version" != 'X.Y.Z' && \
+   "$rollback_image_id" =~ ^sha256:[0-9a-f]{64}$ && \
+   "$rollback_image_id" != 'sha256:0000000000000000000000000000000000000000000000000000000000000000' && \
+   "$rollback_backup" != *YYYY* && "$rollback_env" != *YYYY* && \
+   "$rollback_compose" != *YYYY* && \
+   "$rollback_sha256" =~ ^[0-9a-f]{64}$ && \
+   "$rollback_sha256" != '0000000000000000000000000000000000000000000000000000000000000000' ]] || {
+  echo 'replace every rollback placeholder from the recorded mapping' >&2
+  exit 1
+}
+[[ -f "$rollback_backup" && ! -L "$rollback_backup" && \
+   -f "$rollback_env" && ! -L "$rollback_env" && \
+   -f "$rollback_compose" && ! -L "$rollback_compose" ]] || {
+  echo 'matching rollback snapshot, env, or Compose file is missing/unsafe' >&2
+  exit 1
+}
+[[ -f .env && ! -L .env ]] || {
+  echo 'live .env is missing or unsafe' >&2
+  exit 1
+}
+actual_rollback_image_id="$(docker image inspect -f '{{.Id}}' \
+  "$rollback_image")"
+[[ "$actual_rollback_image_id" == "$rollback_image_id" ]] || {
+  echo 'rollback image tag no longer points to the recorded image ID' >&2
+  exit 1
+}
+actual_rollback_sha256="$(sha256sum "$rollback_backup" | awk '{print $1}')"
+[[ "$actual_rollback_sha256" == "$rollback_sha256" ]] || {
+  echo 'rollback snapshot SHA-256 does not match the manifest' >&2
+  exit 1
+}
+test -z "$(git status --porcelain)"
+git cat-file -e "${rollback_git_commit}^{commit}"
+git checkout --detach "$rollback_git_commit"
+test "$(git rev-parse HEAD)" = "$rollback_git_commit"
+cmp -s docker-compose.yml "$rollback_compose" || {
+  echo 'saved rollback Compose does not match the recorded Git commit' >&2
+  exit 1
+}
+install -m 0600 -- "$rollback_env" .env
+grep -Fx "BRCLIO_IMAGE=${rollback_image}" .env
+grep -Fx "BRCLIO_VERSION=${rollback_version}" .env
+docker compose config --images | grep -Fx "$rollback_image"
+docker compose stop -t 60 brclio-mail
+volume_users="$(docker ps -q --filter volume=brclio-mail-data)"
+[[ -z "$volume_users" ]] || {
+  printf 'volume is still used by: %s\n' "$volume_users" >&2
+  exit 1
+}
 ```
+
+然后回到本节上方的完整恢复代码块，把第一行 `restore_file=...` 改成 `rollback_backup` 的 basename（例如 `pre-upgrade-20260825T120000Z.sqlite`）。该代码块会再次严格验证 SQLite，把当前 DB/WAL/SHM 留在随机安全目录，使用已经固定到本机 image ID 且禁网的 helper 恢复快照，再以旧镜像运行 doctor；只有 doctor 成功才 `up`。恢复后重新完成 HTTPS、SMTP、IMAP 与真实收发验收。
 
 Compose 使用 Docker `local` logging driver 的轮换参数；它不是集中审计。Docker socket 等同主机高权限，必须限制访问。systemd 与 Docker 间迁移时，先停止源服务，再通过经过验证的 SQLite 快照迁移，不能直接共享正在运行的数据目录。

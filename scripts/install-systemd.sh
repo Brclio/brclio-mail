@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly default_version="v0.2.0-preview"
+readonly default_version="v0.2.1-preview"
 readonly service_user="brclio-mail"
 readonly service_group="brclio-mail"
 
@@ -30,7 +30,7 @@ Usage:
 Options:
   --hostname HOST       Public mail host whose A/AAAA points to this server.
   --acme-email EMAIL    Contact email for automatic TLS certificates.
-  --version TAG         GitHub release tag to install (default: v0.2.0-preview).
+  --version TAG         GitHub release tag to install (default: v0.2.1-preview).
   --binary PATH         Install a local binary instead of downloading a release.
   --no-start            Install files but do not enable, start, or restart service.
   -h, --help            Show this help.
@@ -122,7 +122,7 @@ else
   skip_systemctl=1
 fi
 
-for command_name in install mktemp tar openssl; do
+for command_name in install mktemp tar openssl sed; do
   command -v "${command_name}" >/dev/null || fail "required command not found: ${command_name}"
 done
 
@@ -353,9 +353,11 @@ if [[ ! -e "${environment_path}" ]]; then
   generated_environment="${work_dir}/brclio-mail.env"
   cp "${environment_template}" "${generated_environment}"
   if [[ -n "${mail_hostname}" ]]; then
+    escaped_mail_hostname="$(printf '%s' "${mail_hostname}" | sed -e 's/[\\&|]/\\&/g')"
+    escaped_acme_email="$(printf '%s' "${acme_email}" | sed -e 's/[\\&|]/\\&/g')"
     sed -i.bak \
-      -e "s|mail.example.com|${mail_hostname}|g" \
-      -e "s|postmaster@example.com|${acme_email}|g" \
+      -e "s|mail.example.com|${escaped_mail_hostname}|g" \
+      -e "s|postmaster@example.com|${escaped_acme_email}|g" \
       "${generated_environment}"
     rm -f -- "${generated_environment}.bak"
   fi

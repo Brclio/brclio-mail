@@ -170,7 +170,7 @@ fi
 
 main_pid_before_ambiguous_target="$(systemctl show --property=MainPID --value brclio-mail.service)"
 if "${repository_root}/scripts/upgrade-systemd.sh" \
-  --version v0.2.0-preview --binary "${binary_path}" \
+  --version v0.2.1-preview --binary "${binary_path}" \
   >"${temporary_directory}/ambiguous-target.log" 2>&1; then
   fail "upgrade accepted both --version and --binary"
 fi

@@ -2,11 +2,12 @@ name: brclio-mail
 
 services:
   brclio-mail:
-    image: ${BRCLIO_IMAGE:-brclio-mail:preview}
+    image: ${BRCLIO_IMAGE:-brclio-mail:0.2.1-preview}
+    pull_policy: never
     build:
       context: .
       args:
-        VERSION: ${BRCLIO_VERSION:-0.2.0-preview}
+        VERSION: ${BRCLIO_VERSION:-0.2.1-preview}
         COMMIT: ${BRCLIO_COMMIT:-local}
         BUILD_DATE: ${BRCLIO_BUILD_DATE:-1970-01-01T00:00:00Z}
     restart: unless-stopped

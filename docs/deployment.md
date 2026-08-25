@@ -8,6 +8,8 @@ Brclio Mail Preview 面向个人、家庭和完全受信任的小公司/小团�
 
 **首选部署方式是原生 Linux + systemd。** 本文主线适用于带 systemd 的 Ubuntu/Debian 与 RHEL/Rocky/AlmaLinux 等发行版；Docker Compose 保留为[可选方式](#8-可选docker-compose)，但不会改变单机边界或 Preview 成熟度。
 
+需要线性图文步骤时，直接选择：[宝塔面板部署](tutorial-baota.md)、[命令行与一键部署](tutorial-command-line.md)或[Docker Compose 部署](tutorial-docker.md)。本文继续作为 TLS、路径、端口和生命周期的详细参考。
+
 主机至少需要：
 
 - 64 位 Linux、systemd、root/sudo 权限和本地块存储；
@@ -55,7 +57,7 @@ make build
 Release 路线应检出准备部署的明确 tag，先查看变更和安装脚本，再执行安装；若审阅的是某个未发布 commit，必须自行构建并改用 `--binary`：
 
 ```bash
-target_version="v0.2.0-preview"
+target_version="v0.2.1-preview"
 git clone --branch "$target_version" --depth 1 https://github.com/Brclio/brclio-mail.git
 cd brclio-mail
 git status --short
@@ -66,7 +68,7 @@ sudo ./scripts/install-systemd.sh \
   --no-start
 ```
 
-`target_version` 只是当前 Preview 示例；部署时应把 checkout 与 `--version` 同时改成已审阅的同一 Release tag。`--no-start` 让管理员先检查配置、防火墙和 DNS。若同时提供 `--hostname` 与 `--acme-email` 且不加该选项，首次安装会默认 `enable --now`；不提供必要参数时只安装、不启动。用本地构建时改为 `--binary "$PWD/bin/brclio-mail"`；若从 Release tar 解压后直接运行包内脚本且不传目标参数，脚本会使用同包二进制，不会下载硬编码的旧版本。首次安装不会覆盖预先存在的配置或 secret，缺少时会生成随机 `setup_token` 和空的 `relay_password`；检测到现有二进制、unit 或数据库时，直接 installer 会拒绝覆盖，必须使用第 9 节的事务式升级脚本。
+`target_version` 只是当前 Preview 示例；部署时应把 checkout 与 `--version` 同时改成已审阅的同一 Release tag。`--no-start` 是唯一可靠的禁止自动启动门禁，让管理员先检查配置、防火墙和 DNS。若同时提供 `--hostname` 与 `--acme-email` 且不加该选项，首次安装会默认 `enable --now`；即使不传这两个参数，只要管理员已经预置无示例占位符的就绪 env，安装器仍可能启动。用本地构建时改为 `--binary "$PWD/bin/brclio-mail"`；若从 Release tar 解压后直接运行包内脚本且不传目标参数，脚本会使用同包二进制，不会下载硬编码的旧版本。首次安装不会覆盖预先存在的配置或 secret，缺少时会生成随机 `setup_token` 和空的 `relay_password`；检测到现有二进制、unit 或数据库时，直接 installer 会拒绝覆盖，必须使用第 9 节的事务式升级脚本。
 
 默认布局：
 
@@ -183,6 +185,24 @@ sudo firewall-cmd --list-ports
 
 ```bash
 sudo systemctl daemon-reload
+if ! sudo systemctl start brclio-mail-doctor.service; then
+  sudo journalctl -u brclio-mail-doctor.service -n 100 --no-pager
+  echo 'doctor failed; public listeners remain stopped' >&2
+  exit 1
+fi
+doctor_invocation_id="$(sudo systemctl show brclio-mail-doctor.service \
+  --property=InvocationID --value)"
+[[ -n "$doctor_invocation_id" ]] || {
+  echo 'cannot resolve the current doctor invocation' >&2
+  exit 1
+}
+doctor_report="$(sudo journalctl \
+  "_SYSTEMD_INVOCATION_ID=${doctor_invocation_id}" --no-pager -o cat)"
+printf '%s\n' "$doctor_report"
+if grep -F '"deliveryMode":"disabled"' <<<"$doctor_report"; then
+  echo 'configure smarthost or explicitly reviewed direct MX before starting' >&2
+  exit 1
+fi
 sudo systemctl enable --now brclio-mail
 sudo systemctl status brclio-mail --no-pager
 sudo journalctl -u brclio-mail -n 100 --no-pager
@@ -221,22 +241,9 @@ sudo systemctl is-active brclio-mail
 
 需要容器隔离或已有 Docker 运维体系时，可以继续使用 Compose。它是可选部署面，不是默认建议，也不能提供高可用。
 
-```bash
-cp .env.example .env
-mkdir -p secrets/tls
-openssl rand -base64 36 > secrets/setup_token
-: > secrets/relay_password
-chmod 700 secrets secrets/tls
-chmod 600 secrets/setup_token secrets/relay_password
-sudo chown -R 10001:10001 secrets
+完整的首次安装、TLS、volume、备份、恢复和升级流程见 [Docker Compose 独立教程](tutorial-docker.md)。这里不再提供可独立粘贴的“最小启动块”：跳过该教程第 6 节的既有 volume 拒绝、DockerRootDir/实际文件系统门禁和预启动 doctor，可能把新配置直接连接到旧邮件库或网络/FUSE 卷。必须从独立教程第 1 节顺序执行到第 7 节，不能只摘取最后的 `docker compose up`。
 
-# 编辑 .env 后：
-docker compose config
-docker compose up -d --build
-docker compose logs -f brclio-mail
-```
-
-Compose 使用 `/data` named volume，并把主机 `80/443/25/465/587/993` 映射到容器 `8080/8443/2525/2465/2587/2993`。静态证书路径应使用 `/run/tls/fullchain.pem` 与 `/run/tls/privkey.pem`。Docker 发布端口可能绕过部分 UFW 规则；应理解 Docker 的[端口发布](https://docs.docker.com/engine/network/port-publishing/)和[防火墙规则](https://docs.docker.com/engine/network/firewall-iptables/)行为，并同时配置云防火墙。
+Compose 使用 `/data` named volume，并把主机 `80/443/25/465/587/993` 映射到容器 `8080/8443/2525/2465/2587/2993`。静态证书路径应使用 `/run/tls/fullchain.pem` 与 `/run/tls/privkey.pem`；复制证书后还要单独核对 `10001:10001`、`0600`，不能依赖之前的递归 `chown`。Docker 发布端口可能绕过部分 UFW 规则；应理解 Docker 的[端口发布](https://docs.docker.com/engine/network/port-publishing/)和[防火墙规则](https://docs.docker.com/engine/network/firewall-iptables/)行为，并同时配置云防火墙。
 
 systemd 与 Docker 的配置文件、secret 路径和数据路径不同，不能直接混用。完整 Docker 运维命令见[运维文档](operations.md#docker-compose-运维对照)。
 
@@ -245,7 +252,7 @@ systemd 与 Docker 的配置文件、secret 路径和数据路径不同，不能
 升级前先按[运维文档](operations.md)创建并移出一份备份，再检出明确的目标 tag/commit。Release 安装示例：
 
 ```bash
-target_version="v0.2.0-preview"
+target_version="v0.2.1-preview"
 git fetch --tags
 git checkout "$target_version"
 sudo ./scripts/upgrade-systemd.sh --version "$target_version"

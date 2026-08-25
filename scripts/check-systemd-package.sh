@@ -60,6 +60,21 @@ if BRCLIO_INSTALL_ROOT="${symlink_root}" \
 fi
 [[ ! -e "${symlink_root}/usr/local/bin/brclio-mail" ]] || { printf 'symlink-file preflight installed a binary\n' >&2; exit 1; }
 
+escaped_email_root="${temporary_root}/escaped-email-root"
+BRCLIO_INSTALL_ROOT="${escaped_email_root}" \
+BRCLIO_SKIP_USER_SETUP=1 \
+BRCLIO_SKIP_SYSTEMCTL=1 \
+  "${repository_root}/scripts/install-systemd.sh" \
+  --binary "${binary}" \
+  --hostname mail.escaped.test \
+  --acme-email 'first&last@example.test' \
+  --no-start >/dev/null
+grep -Fx 'BRCLIO_ACME_EMAIL=first&last@example.test' \
+  "${escaped_email_root}/etc/brclio-mail/brclio-mail.env" >/dev/null || {
+  printf 'installer corrupted a sed-sensitive ACME email\n' >&2
+  exit 1
+}
+
 BRCLIO_INSTALL_ROOT="${temporary_root}/root" \
 BRCLIO_SKIP_USER_SETUP=1 \
 BRCLIO_SKIP_SYSTEMCTL=1 \

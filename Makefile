@@ -1,6 +1,6 @@
 GO ?= go
 BINARY ?= bin/brclio-mail
-VERSION ?= 0.2.0-preview
+VERSION ?= 0.2.1-preview
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(BUILD_DATE)

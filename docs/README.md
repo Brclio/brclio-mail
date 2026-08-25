@@ -1,11 +1,17 @@
 # 文档索引
 
-Brclio Mail 当前是 **Preview**。建议按以下顺序阅读和执行：
+Brclio Mail 当前是 **Preview**。先按实际服务器选择一篇独立教程：
 
-1. [部署与 TLS](deployment.md)：Ubuntu/Debian、RHEL 系 systemd 首选部署，ACME/静态证书、防火墙、端口与可选 Docker Compose。
+1. [宝塔面板部署](tutorial-baota.md)：用宝塔终端、防火墙和计划任务管理原生 systemd 服务。
+2. [命令行与一键部署](tutorial-command-line.md)：SSH 一次粘贴安装与完整手动流程。
+3. [Docker Compose 部署](tutorial-docker.md)：可选的单机容器路线、volume、备份与升级。
+
+然后按顺序阅读通用参考：
+
+1. [部署与 TLS](deployment.md)：systemd 安装、ACME/静态证书、防火墙、端口与生命周期。
 2. [DNS 配置](dns.md)：A/AAAA、MX、PTR、SPF、DKIM、DMARC、TLS-RPT、SRV 与核验命令。
 3. [第三方客户端](clients.md)：IMAPS 与 SMTP Submission 参数。
-4. [运维、备份与恢复](operations.md)：systemd 日志、健康检查、一致性备份、恢复、成对升级/回滚和 Docker 对照。
+4. [运维、备份与恢复](operations.md)：日志、健康检查、一致性备份、恢复和升级/回滚。
 5. [架构](architecture.md)与[威胁模型](threat-model.md)：数据边界、删除语义、安全能力和责任边界。
 6. [限制与路线图](limitations-roadmap.md)：上线前必须了解的缺口。
 

@@ -28,18 +28,44 @@ Brclio Mail 把网页邮箱、管理员控制台、SMTP、Submission、IMAP、�
 首选方式是直接安装为 Linux systemd 服务；示例适用于 systemd `247` 或更新版本的 Ubuntu/Debian 与 RHEL/Rocky/AlmaLinux。前置条件包括常用系统工具、一个域名、一台具有固定公网 IP 的主机，以及能够设置反向 DNS 的云服务商。先确认上游网络允许入站 TCP 25；很多云平台还会封禁出站 25。安装程序默认下载指定 GitHub Release 并核对 SHA-256；只有选择本地源码构建时才需要 Go `1.26.6`。
 
 ```bash
-target_version="v0.2.0-preview"
-git clone --branch "$target_version" --depth 1 https://github.com/Brclio/brclio-mail.git
-cd brclio-mail
+bash <<'BRCLIO_INSTALL'
+set -Eeuo pipefail
+target_version="v0.2.1-preview"
+repo_dir="${PWD}/brclio-mail"
+[[ ! -e "$repo_dir" && ! -L "$repo_dir" ]] || {
+  echo 'target checkout already exists; inspect it instead of reusing it' >&2
+  exit 1
+}
+git clone --branch "$target_version" --depth 1 \
+  https://github.com/Brclio/brclio-mail.git "$repo_dir"
+cd "$repo_dir"
+test -z "$(git status --porcelain)"
+test "$(git describe --tags --exact-match)" = "$target_version"
 sudo ./scripts/install-systemd.sh \
   --version "$target_version" \
   --hostname mail.example.com \
   --acme-email postmaster@example.com \
   --no-start
 sudoedit /etc/brclio-mail/brclio-mail.env
+if ! sudo systemctl start brclio-mail-doctor.service; then
+  sudo journalctl -u brclio-mail-doctor.service -n 100 --no-pager
+  echo 'doctor failed; public listeners remain stopped' >&2
+  exit 1
+fi
+doctor_invocation_id="$(sudo systemctl show brclio-mail-doctor.service \
+  --property=InvocationID --value)"
+[[ -n "$doctor_invocation_id" ]]
+doctor_report="$(sudo journalctl \
+  "_SYSTEMD_INVOCATION_ID=${doctor_invocation_id}" --no-pager -o cat)"
+printf '%s\n' "$doctor_report"
+grep -F '"deliveryMode":"smarthost"' <<<"$doctor_report" || {
+  echo 'configure and verify smarthost before starting public listeners' >&2
+  exit 1
+}
 sudo systemctl enable --now brclio-mail
 sudo systemctl status brclio-mail --no-pager
 /usr/local/bin/brclio-mail version
+BRCLIO_INSTALL
 ```
 
 安装程序创建受限的 `brclio-mail` 服务账号，配置位于 `/etc/brclio-mail`，SQLite 与 ACME cache 位于 `/var/lib/brclio-mail`，并在缺失时生成 `/etc/brclio-mail/secrets/setup_token`。首次安装不会覆盖预先准备的配置或 secret；检测到现有安装时会拒绝直接重装，必须走受备份保护的 `upgrade-systemd.sh`。推荐配置 smarthost 并保持 `BRCLIO_DIRECT_DELIVERY=false`；完整的系统包、防火墙、TLS、secret 权限及 SELinux 提示见[部署指南](docs/deployment.md)。
@@ -58,6 +84,12 @@ systemd 服务直接监听标准端口：
 | 993 | 隐式 TLS IMAP |
 
 Docker Compose 仍是[可选部署方式](docs/deployment.md#8-可选docker-compose)，不再是首选。无论采用 systemd 还是 Docker，数据库必须位于同一主机的本地块存储；**不要**使用 NFS、SMB、对象存储 FUSE、多主机共享卷或多个服务副本。
+
+按实际环境选择独立图文教程：
+
+- [宝塔面板裸机部署](docs/tutorial-baota.md)
+- [命令行与一键部署](docs/tutorial-command-line.md)
+- [Docker Compose 部署](docs/tutorial-docker.md)
 
 ## TLS
 
@@ -101,6 +133,9 @@ curl -fsS https://mail.example.com/healthz
 
 ## 文档
 
+- [宝塔面板部署教程](docs/tutorial-baota.md)
+- [命令行与一键部署教程](docs/tutorial-command-line.md)
+- [Docker Compose 部署教程](docs/tutorial-docker.md)
 - [部署与 TLS](docs/deployment.md)
 - [DNS、PTR 与发信信誉](docs/dns.md)
 - [第三方客户端配置](docs/clients.md)
